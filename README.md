@@ -9,6 +9,7 @@ Paste this command and hit Enter:
 
 Bash
 git clone https://github.com/ItsJaCaL/Calibration_Hub.git && cd Calibration_Hub && chmod +x install.sh && ./install.sh
+
 Wait for the green 🚀 INSTALLATION COMPLETE message. It will give you a link like http://192.168.50.254:3258.
 
 How to Use
