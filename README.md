@@ -1,4 +1,5 @@
 🛠️ JaCaL's Calibration Wizard: Install Guide
+
 This wizard is a 21-step journey to turn your 3D printer into a precision machine. It handles everything from hardware checks to final plastic tuning.
 
 How to Install
