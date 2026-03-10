@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JaCaL's Calibration Wizard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .step-container { display: none; }
+        .step-active { display: block; }
+    </style>
+</head>
+<body>
+    <div class="card" id="wizard-container" style="max-width: 550px;">
+        <h1 style="text-align: center; color: #89b4fa; margin-top: 0; border-bottom: 1px solid #45475a; padding-bottom: 10px;">JaCaL's Calibration Wizard</h1>
+        
+        <div id="step-0" class="step-container step-active">
+            <h2>The 21-Step Path to Perfection</h2>
+            <p style="color: #cdd6f4;">We will calibrate the hardware, dial in the firmware, and finally tune the melted plastic.</p>
+            <div class="help-box" style="border-left: 4px solid #f38ba8; background-color: rgba(243, 139, 168, 0.1);">
+                <h4 style="color: #f38ba8; margin-top: 0;">🔴 THE ABSOLUTE NECESSITIES</h4>
+                <ul style="text-align: left; font-size: 14px; margin-top: 0;">
+                    <li><strong>OrcaSlicer (Recommended):</strong> Use the "Calibration" menu at the top. It builds the tests and G-code for you so you don't have to think.</li>
+                    <li><strong>1x Roll of Filament:</strong> You can't tune plastic without plastic!</li>
+                    <li><strong>Digital Calipers:</strong> Required to tune Flow Rate and Skew down to 0.01mm.</li>
+                    <li><strong>Steel Ruler:</strong> At least 150mm. Required for Kinematics.</li>
+                    <li><strong>A4 Paper:</strong> For physical Z-Offset.</li>
+                    <li><strong>Marker / Sharpie:</strong> To mark filament for E-Steps.</li>
+                </ul>
+            </div>
+            <div class="help-box" style="border-left: 4px solid #f9e2af; background-color: rgba(249, 226, 175, 0.1);">
+                <h4 style="color: #f9e2af; margin-top: 0;">🟡 HIGHLY RECOMMENDED</h4>
+                <ul style="text-align: left; font-size: 14px; margin-top: 0;">
+                    <li><strong>Belt Frequency App:</strong> (e.g., Spectroid)</li>
+                    <li><strong>ADXL345 Accelerometer:</strong> For Input Shaper.</li>
+                </ul>
+            </div>
+            <br>
+            <button id="btn-next-0" class="btn" style="background-color: #a6e3a1; color: #1e1e2e; font-size: 16px; padding: 15px; font-weight: bold;">Hell Yes, Let's Go ➔</button>
+        </div>
+
+<div id="step-1" class="step-container">
+            <h2>Step 1: Sensor Check</h2>
+            
+            <div class="help-box">
+                <h4>1. The Clicky Switches (Endstops)</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">We need to prove your printer knows when it hits a wall.</p>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Without touching the printer, click <strong>Query Endstops</strong> below. They should all say <strong>open</strong>.</li>
+                    <li>Use your left hand to press and <strong>HOLD DOWN</strong> the X-axis physical switch on your printer.</li>
+                    <li>While holding it down, use your mouse to click <strong>Query Endstops</strong> again.</li>
+                    <li>The screen should now say the X axis is <strong style="color: #f38ba8;">TRIGGERED</strong>.</li>
+                    <li>Let go of the switch. Repeat this exact process for the Y and Z switches.</li>
+                </ol>
+                <p style="color: #f9e2af; font-size: 13px;"><em>Fix it: If a switch says TRIGGERED when you aren't touching it, you need to open printer.cfg and put an exclamation mark ( ! ) in front of its pin name.</em></p>
+                <label style="display: block; margin-top: 10px; color: #fab387; font-weight: bold; cursor: pointer;">
+                    <input type="checkbox" id="toggle-sensorless" onchange="toggleSensorless()"> I use Sensorless Homing (I don't have physical switches. Skip this.)
+                </label>
+            </div>
+            <div id="endstop-list" class="status-box">Press Query to check endstops...</div>
+            <button onclick="queryEndstops()" class="btn secondary" id="btn-query-endstops" style="margin-top:10px;">Query Endstops</button>
+            
+            <hr>
+            
+            <div class="help-box">
+                <h4>2. Probe / BLTouch (The Finger Test)</h4>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Click <strong>👇 Down</strong> to drop the pin.</li>
+                    <li>Click <strong>❓ Query</strong>. The status below should say <strong>open</strong>.</li>
+                    <li>Gently push the pin up with your finger until it clicks.</li>
+                    <li>Click <strong>❓ Query</strong>. It should now say <strong style="color: #f38ba8;">TRIGGERED</strong>.</li>
+                    <li>The probe is now latched in an error state (likely flashing red). Click <strong>♻️ Reset</strong> to clear its brain.</li>
+                    <li>Click <strong>👇 Down</strong> to drop the pin.</li>
+                    <li>Click <strong>👆 Up</strong> to pull the pin safely back up.</li>
+                </ol>
+                <p style="color: #f9e2af; font-weight: bold; margin-bottom: 0;">⚠️ Repeat this entire sequence one more time to make absolutely sure it works reliably!</p>
+            </div>
+            <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                <button onclick="runGcode('BLTOUCH_DEBUG COMMAND=pin_down', 'Pin dropped.', this)" class="btn secondary">👇 Down</button>
+                <button onclick="runGcode('QUERY_PROBE', 'Querying...', this); setTimeout(queryProbe, 500);" class="btn secondary">❓ Query</button>
+                <button onclick="runGcode('BLTOUCH_DEBUG COMMAND=pin_up', 'Pin raised.', this)" class="btn secondary">👆 Up</button>
+                <button onclick="runGcode('BLTOUCH_DEBUG COMMAND=reset', 'Probe Reset.', this)" class="btn" style="background-color: #f38ba8; color:#1e1e2e;">♻️ Reset</button>
+            </div>
+            <div id="probe-status" class="status-box">Probe status unknown...</div>
+            
+            <div style="margin-top: 20px; background-color: #181825; padding: 15px; border-radius: 8px;">
+                <label style="display: block; margin-bottom: 10px; color: #a6e3a1; font-weight: bold; cursor: pointer;">
+                    <input type="checkbox" id="check-endstops" onchange="validateStep1()"> Endstops are verified (or Sensorless is checked)
+                </label>
+                <label style="display: block; color: #a6e3a1; font-weight: bold; cursor: pointer;">
+                    <input type="checkbox" id="check-probe" onchange="validateStep1()"> Probe triggers correctly and pulls back up
+                </label>
+            </div>
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-1" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-1" class="btn" disabled style="flex: 2; opacity: 0.5;">Next: Motion Check ➔</button>
+            </div>
+        </div>
+
+        <div id="step-2" class="step-container">
+            <h2>Step 2: Motion Check</h2>
+            
+            <div class="help-box">
+                <h4>1. The Wiggle Test (Power Check)</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;"><strong style="color: #f38ba8;">⚠️ CRITICAL: Use your hands to physically push the print head to the exact center of the bed right now!</strong> If you don't, it might crash into a wall during this test.</p>
+                <p style="font-size: 14px; margin-bottom: 5px;">We need to prove the motors have power and aren't wired backwards.</p>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Click the <strong>Buzz X</strong> button below.</li>
+                    <li>Watch the X motor. It should smoothly wiggle back and forth in place.</li>
+                    <li>It should <strong>NOT</strong> make a horrible screeching or grinding noise.</li>
+                    <li>Repeat this for the Y, Z, and Extruder motors.</li>
+                </ol>
+            </div>
+            <div id="motor-buttons" class="motor-grid">Loading motors...</div>
+            
+            <div style="margin-top: 15px; background-color: #181825; padding: 10px; border-radius: 8px;">
+                <label style="color: #a6e3a1; font-weight: bold; cursor: pointer;">
+                    <input type="checkbox" id="check-buzz" onchange="validateStep2()"> All motors buzzed smoothly without grinding
+                </label>
+            </div>
+            
+            <div id="travel-section" style="display: none; margin-top: 20px;">
+                <hr>
+                <div class="help-box">
+                    <h4>2. Travel Direction</h4>
+                    <p style="font-size: 14px; margin-bottom: 5px;"><strong style="color: #f38ba8;">⚠️ CRITICAL: Use your hands to physically push the print head to the exact center of the bed right now!</strong></p>
+                    <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                        <li>Click <strong>Move X Left</strong>. If your head moves diagonally, don't panic! It just means your printer uses CoreXY logic.</li>
+                        <li>The toolhead MUST move generally toward the <strong>Left</strong> side.</li>
+                    </ol>
+                </div>
+                <div class="motor-grid">
+                    <button onclick="smartMove('x', -20, this)" class="btn secondary">Move X Left (-20mm)</button>
+                    <button onclick="smartMove('y', -20, this)" class="btn secondary">Move Y Forward (-20mm)</button>
+                </div>
+                <div style="margin-top: 15px; background-color: #181825; padding: 10px; border-radius: 8px;">
+                    <label style="color: #a6e3a1; font-weight: bold; cursor: pointer;">
+                        <input type="checkbox" id="check-travel" onchange="validateStep2()"> The toolhead moved the correct directions
+                    </label>
+                </div>
+            </div>
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-2" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-2" class="btn" disabled style="flex: 2; opacity: 0.5;">Next: Kinematics ➔</button>
+            </div>
+        </div>
+
+<div id="step-3" class="step-container">
+            <h2>Step 3: Kinematics (The Ruler Test)</h2>
+            <div class="help-box">
+                <p style="font-size: 14px;"><strong>⚠️ Warning:</strong> If you clicked move too many times and hit a wall, click <strong>Unlock Motors</strong> below, move the head back to the center by hand, and start over.</p>
+            </div>
+            <button onclick="runGcode('M84', 'Motors Unlocked. Move by hand now.', this)" class="btn" style="background-color: #f38ba8; color: #1e1e2e; width: 100%; margin-bottom: 10px;">🔓 Unlock Motors (Turn Off)</button>
+
+            
+            <div class="help-box">
+                <h4>1. The Measurement Check</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">We need to prove that when you ask for 50mm, the printer physically moves exactly 50mm.</p>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Lay your <strong>Steel Ruler</strong> flat on the print bed along the X-axis (left to right).</li>
+                    <li>Align the nozzle so it is pointing directly at the <strong>0mm</strong> mark.</li>
+                    <li>Click <strong>Move X +50mm</strong> below.</li>
+                    <li>Look at the ruler. The nozzle should now be pointing exactly at the <strong>50mm</strong> mark.</li>
+                    <li>Repeat this for the Y-axis (front to back) and the Z-axis (up and down).</li>
+                </ol>
+                <p style="color: #f9e2af; font-size: 13px;"><em>Fix it: If it moves 100mm or only 25mm, your <strong>rotation_distance</strong> in printer.cfg is wrong. You likely have the wrong belt pitch or motor steps selected.</em></p>
+            </div>
+                        <div class="motor-grid">
+                <button onclick="smartMove('x', 50, this)" class="btn secondary">Move X +50mm</button>
+                <button onclick="smartMove('y', 50, this)" class="btn secondary">Move Y +50mm</button>
+                <button onclick="smartMove('z', 10, this)" class="btn secondary">Move Z +10mm (Up)</button>
+            </div>
+            
+            <br>
+            <div style="margin-top: 20px; background-color: #181825; padding: 15px; border-radius: 8px;">
+                <label style="display: block; color: #a6e3a1; font-weight: bold; cursor: pointer;">
+                    <input type="checkbox" id="check-kinematics" onchange="validateStep3()"> All axes move exactly the distance I asked for
+                </label>
+            </div>
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-3" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-3" class="btn" disabled id="nxt-3" style="flex: 2; opacity: 0.5;">Next: Belt Tension ➔</button>
+            </div>
+        </div>
+
+        <div id="step-4" class="step-container">
+            <h2>Step 4: Belt Tension</h2>
+            
+            <div class="help-box">
+                <h4>1. The Guitar String Method</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">If your belts are loose, your circles will look like eggs. If they are too tight, your motors will scream and die.</p>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Physically move your toolhead so there is a long, clear section of belt exposed.</li>
+                    <li>Open a <strong>Frequency App</strong> (like Spectroid) on your phone.</li>
+                    <li>Pluck the belt with your finger like a guitar string.</li>
+                    <li>The app will show a "peak" frequency (Hz). <strong>Aim for ~110Hz to 150Hz.</strong></li>
+                    <li>Pluck the other belt. Tighten or loosen the screws until <strong>both belts hum at the same frequency.</strong></li>
+                </ol>
+                <p style="color: #f9e2af; font-size: 13px;"><em>Tip: It doesn't matter if you choose 110Hz or 140Hz, what matters is that X and Y are <strong>IDENTICAL</strong>.</em></p>
+            </div>
+            
+            <br>
+            <div style="background-color: #181825; padding: 15px; border-radius: 8px;">
+                <label style="display: block; color: #a6e3a1; font-weight: bold; cursor: pointer;">
+                    <input type="checkbox" id="check-belts" onchange="validateStep4()"> My X and Y belts are tuned to the same frequency
+                </label>
+            </div>
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-4" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-4" class="btn" disabled style="flex: 2; opacity: 0.5;">Next: Thermal Tuning ➔</button>
+            </div>
+        </div>
+
+        <div id="step-5" class="step-container">
+            <h2>Step 5: Thermal Tuning (PID)</h2>
+            <div class="help-box">
+                <h4>1. The Science of Heat</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">We need to teach your printer how to hold a temperature without wobbling up and down.</p>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Click <strong>Tune Bed</strong>. The printer will heat up and cool down 5 times. This can take up to 30 minutes</li>
+                    <li>Wait for the graph to flatten out and the status to say <strong>Complete</strong>.</li>
+                    <li>Repeat this for the <strong>Hotend</strong>.</li>
+                    <li><strong>CRITICAL:</strong> Once both are done, click <strong>💾 Save Config</strong>. The printer will restart. Do not close this page</li>
+                </ol>
+            </div>
+            
+            <canvas id="tempChart" height="100"></canvas>
+            <div class="pid-control" style="margin-top:10px;">
+                <label>Bed Target (°C):</label> <input type="number" id="bed-temp" value="65" class="input-box">
+                <button id="btn-pid-bed" class="btn secondary">Tune Bed</button>
+            </div>
+            <div class="pid-control">
+                <label>Hotend Target (°C):</label> <input type="number" id="ext-temp" value="210" class="input-box">
+                <button id="btn-pid-ext" class="btn secondary">Tune Hotend</button>
+            </div>
+            <div id="pid-status" class="status-box">Ready.</div>
+            <button class="btn" style="background-color: #a6e3a1; color: #1e1e2e; margin-bottom: 10px;" onclick="runGcode('SAVE_CONFIG', 'Saving...', this)">💾 Save Config & Restart</button>
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-5" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-5" class="btn" style="flex: 2;">Next: Extrusion ➔</button>
+            </div>
+        </div>
+
+        <div id="step-6" class="step-container">
+            <h2>Step 6: Extruder (The 100mm Test)</h2>
+            <div class="help-box">
+                <h4>1. The Measurement</h4>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Click <strong>🔥 Heat to 210°C</strong> and wait for the nozzle to get hot.</li>
+                    <li>Use your <strong>Steel Ruler</strong> to measure exactly <strong>120mm</strong> of filament from where it enters the extruder.</li>
+                    <li>Use your <strong>Marker</strong> to put a clear line on the filament at that 120mm mark.</li>
+                    <li>Click <strong>⚙️ Extrude 100mm</strong>. The printer will pull the filament slowly.</li>
+                    <li>Once it stops, measure the distance from the extruder to your mark.</li>
+                    <li><strong>Expected:</strong> 20mm. <strong>Math:</strong> 120 - (What's left) = Actual Extruded.</li>
+                </ol>
+            </div>
+            
+            <button onclick="runGcode('M104 S210', 'Heating...', this)" class="btn secondary">🔥 Heat to 210°C</button>
+            <button onclick="extrudeFilament(100, this)" class="btn secondary" style="margin-top:5px;">⚙️ Extrude 100mm</button>
+            <div style="background-color: #1e1e2e; padding: 15px; border-radius: 8px; margin-top:10px;">
+                <input type="number" id="current-rd" value="8.0" step="0.001" class="input-box" placeholder="Current Dist in Config">
+                <input type="number" id="actual-ext" value="95" step="0.1" class="input-box" placeholder="Actual Measured Extrusion">
+                <button onclick="calcRotation()" class="btn secondary" style="margin-top:5px; width:100%;">Calculate New Value</button>
+                <div id="calc-result" class="status-box" style="margin-top: 5px;"></div>
+            </div>
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-6" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-6" class="btn" style="flex: 2;">Next: Motor Power ➔</button>
+            </div>
+        </div>
+
+        <div id="step-7" class="step-container">
+            <h2>Step 7: Motor Power (Currents)</h2>
+            <div class="help-box">
+                <h4>1. The Safety Limit</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">If you push too much power into the motors, they will get hot enough to melt your printer. We need to set a safety limit.</p>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Find the sticker on your motor. Look for a number ending in <strong>A</strong> (Amps), like 1.5A.</li>
+                    <li>Type that number into the box below.</li>
+                    <li>Click <strong>Calculate</strong>. It will give you a safe <strong>run_current</strong>.</li>
+                    <li>Open your <code>printer.cfg</code> and update the <strong>run_current</strong> for that motor. Repeat for all motors</li>
+                </ol>
+            </div>
+            <input type="number" id="rated-current" value="1.5" step="0.1" class="input-box" placeholder="Rated Current (A) from motor sticker">
+            <button onclick="calcCurrent()" class="btn secondary" style="margin-top:5px; width:100%;">Calculate Safe Power</button>
+            <div id="current-result" class="status-box" style="margin-top: 5px;"></div>
+            <br>
+            <div style="margin-top: 10px; background-color: #181825; padding: 15px; border-radius: 8px;">
+                <label style="display: block; color: #a6e3a1; font-weight: bold; cursor: pointer;">
+                    <input type="checkbox" id="check-currents" onchange="validateStep7()"> I have updated my motor currents
+                </label>
+            </div>
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-7" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-7" class="btn" disabled style="flex: 2; opacity: 0.5;">Next: Leveling ➔</button>
+            </div>
+        </div>
+
+        <div id="step-8" class="step-container">
+            <h2>Step 8: Bed Alignment</h2>
+            <div class="help-box">
+                <h4>1. The Leveling Check</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">We need to make sure the bed is actually flat relative to the nozzle.</p>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Click <strong>🏠 Home All</strong>. The printer will move to its start position.</li>
+                    <li>If you have 2 or more Z motors, click <strong>Auto-Align</strong>.</li>
+                    <li>If you have manual knobs under the bed, click <strong>Check Bed Screws</strong> and follow the instructions in the console.</li>
+                </ol>
+            </div>
+            
+            <button onclick="runGcode('G28', 'Homing...', this)" class="btn secondary" style="width:100%;">🏠 Home All Axes</button>
+            <div id="alignment-buttons" style="margin-top:10px; display:flex; flex-direction:column; gap:5px;"></div>
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-8" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-8" class="btn" style="flex: 2;">Next: Z-Offset ➔</button>
+            </div>
+        </div>
+
+        <div id="step-9" class="step-container">
+            <h2>Step 9: Z-Offset (The Paper Test)</h2>
+            <div class="help-box">
+                <h4>1. The First Layer Squish</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">We need to set the exact distance between the nozzle and the bed so your plastic sticks.</p>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Place a single sheet of <strong>A4 Paper</strong> on the bed under the nozzle.</li>
+                    <li>Click <strong>Start Paper Test</strong>. The nozzle will move to the center and drop down.</li>
+                    <li>Wiggle the paper back and forth. If it moves freely, click <strong>Down -0.1</strong>.</li>
+                    <li>Keep clicking <strong>Down</strong> until the nozzle grabs the paper.</li>
+                    <li><strong>The Goal:</strong> You should feel the nozzle "biting" the paper. You can move it, but there is friction.</li>
+                    <li>Click <strong>Accept</strong>, then click <strong>Save Config</strong>.</li>
+                </ol>
+            </div>
+            <button onclick="runGcode('PROBE_CALIBRATE', 'Starting...', this)" class="btn secondary" style="width:100%;">1. Start Paper Test</button>
+            <div style="margin-top: 10px; display: flex; gap: 5px;">
+                <button onclick="runTestZ('-1.0', 'z-status-9')" class="btn secondary">Down -1.0</button>
+                <button onclick="runTestZ('-0.1', 'z-status-9')" class="btn secondary">Down -0.1</button>
+                <button onclick="runTestZ('-0.05', 'z-status-9')" class="btn secondary">Down -0.05</button>
+            </div>
+            <div style="margin-top: 5px; display: flex; gap: 5px;">
+                <button onclick="runTestZ('+1.0', 'z-status-9')" class="btn secondary">Up +1.0</button>
+                <button onclick="runTestZ('+0.1', 'z-status-9')" class="btn secondary">Up +0.1</button>
+                <button onclick="runTestZ('+0.05', 'z-status-9')" class="btn secondary">Up +0.05</button>
+            </div>
+            <div style="margin-top: 10px; display: flex; gap: 5px;">
+                <button onclick="runGcode('ACCEPT', 'Accepted!', this)" class="btn" style="background-color: #a6e3a1; color: #1e1e2e; flex: 1;">2. Accept</button>
+                <button onclick="runGcode('SAVE_CONFIG', 'Saving...', this)" class="btn" style="background-color: #fab387; color: #1e1e2e; flex: 1;">3. Save Config</button>
+            </div>
+            <div id="z-status-9" class="status-box" style="margin-top: 10px;">Ready for Paper Test...</div>
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-9" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-9" class="btn" style="flex: 2;">Next: Axis Twist ➔</button>
+            </div>
+        </div>
+
+        <div id="step-10" class="step-container">
+            <h2>Step 10: Axis Twist (The Straightness Test)</h2>
+            <div class="help-box">
+                <h4>1. The Bent Rail Fix</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">If your X-axis rail is slightly twisted, your bed will never feel level. We are going to "digitally" straighten it.</p>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Click <strong>Start Calibration</strong>. The nozzle will move to 3 or more points on the bed.</li>
+                    <li>At <strong>EVERY POINT</strong>, repeat the Paper Test (Step 9).</li>
+                    <li>Wiggle the paper, adjust height until it "bites," and click <strong>Accept Point</strong>.</li>
+                    <li>Once all points are done, click <strong>Save Config</strong>.</li>
+                </ol>
+            </div>
+            <button onclick="runGcode('AXIS_TWIST_COMPENSATION_CALIBRATE', 'Starting...', this)" class="btn secondary" style="width:100%;">1. Start Calibration</button>
+            <div style="margin-top: 10px; display: flex; gap: 5px;">
+                <button onclick="runTestZ('-0.1', 'z-status-10')" class="btn secondary">Down -0.1</button>
+                <button onclick="runTestZ('-0.05', 'z-status-10')" class="btn secondary">Down -0.05</button>
+                <button onclick="runTestZ('+0.05', 'z-status-10')" class="btn secondary">Up +0.05</button>
+                <button onclick="runTestZ('+0.1', 'z-status-10')" class="btn secondary">Up +0.1</button>
+            </div>
+            <div style="margin-top: 10px; display: flex; gap: 5px;">
+                <button onclick="runGcode('ACCEPT', 'Point Accepted! Next...', this)" class="btn" style="background-color: #a6e3a1; color: #1e1e2e; flex: 1;">2. Accept Point</button>
+                <button onclick="runGcode('SAVE_CONFIG', 'Saving...', this)" class="btn" style="background-color: #fab387; color: #1e1e2e; flex: 1;">3. Save Config</button>
+            </div>
+            <div id="z-status-10" class="status-box" style="margin-top: 10px;">Ready for Twist Check...</div>
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-10" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-10" class="btn" style="flex: 2;">Next: Bed Mesh ➔</button>
+            </div>
+        </div>
+
+        <div id="step-11" class="step-container">
+            <h2>Step 11: Bed Mesh (The Digital Map)</h2>
+            <div class="help-box">
+                <h4>1. The Topography Map</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">No print bed is perfectly flat. We are going to map the hills and valleys so the printer can adjust live while printing.</p>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Click <strong>Generate Map</strong>.</li>
+                    <li>The printer will probe the bed in a grid (e.g., 5x5 points).</li>
+                    <li><strong>Do not touch the printer</strong> while it is probing.</li>
+                    <li>Once finished, click <strong>Save Config</strong>.</li>
+                </ol>
+            </div>
+            
+            <button onclick="runGcode('BED_MESH_CALIBRATE', 'Probing...', this)" class="btn secondary" style="width:100%;">1. Generate Map</button>
+            <button onclick="runGcode('SAVE_CONFIG', 'Saving...', this)" class="btn" style="background-color: #fab387; color: #1e1e2e; width:100%; margin-top:5px;">2. Save Config</button>
+            <div id="mesh-status" class="status-box" style="margin-top: 10px;">Ready to probe...</div>
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-11" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-11" class="btn" style="flex: 2;">Next: Skew Correction ➔</button>
+            </div>
+        </div>
+
+<div id="step-12" class="step-container">
+            <h2>Step 12: Skew Correction (The Square Test)</h2>
+            <div class="help-box">
+                <h4>1. The Setup</h4>
+                <ol style="font-size: 14px; padding-left: 20px;">
+                    <li>Download the <strong>100mm Skew Square</strong> below.</li>
+                    <li>Slice it at <strong>100% Scale</strong>. Do not resize it!</li>
+                    <li>Measure Diagonals: Top-Left to Bottom-Right (AC) and Top-Right to Bottom-Left (BD).</li>
+                    <li>Measure the Left side height (AD).</li>
+                </ol>
+            </div>
+            <a href="cal_files/skew_test_square.stl" download class="btn" style="background-color: #89b4fa; display: block; text-decoration: none; text-align: center; margin-bottom: 10px; font-weight: bold;">📥 Download 100mm Skew Square</a>
+            
+            <div style="background-color: #1e1e2e; padding: 15px; border-radius: 8px;">
+                <input type="number" id="skew-ac" class="input-box" placeholder="AC (Diag 1)">
+                <input type="number" id="skew-bd" class="input-box" placeholder="BD (Diag 2)" style="margin-top:5px;">
+                <input type="number" id="skew-ad" class="input-box" placeholder="AD (Side Length)" style="margin-top:5px;">
+                <button onclick="calcSkew()" class="btn secondary" style="margin-top:10px; width:100%;">Apply Math & Save</button>
+            </div>
+            <div id="skew-status" class="status-box" style="margin-top: 10px;">Ready for measurements...</div>
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-12" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-12" class="btn" style="flex: 2;">Next: Input Shaper ➔</button>
+            </div>
+        </div>
+
+        <div id="step-13" class="step-container">
+    <h2>Step 13: Input Shaper (Anti-Vibration)</h2>
+    <div class="help-box">
+        <p style="font-size: 14px;"><strong>Do you have an ADXL345 sensor?</strong></p>
+        <label style="display: block; color: #fab387; font-weight: bold; cursor: pointer;">
+            <input type="checkbox" id="no-adxl" onchange="document.getElementById('adxl-controls').style.display = this.checked ? 'none' : 'block'"> I do NOT have a sensor (Skip this step)
+        </label>
+    </div>
+    
+    <div id="adxl-controls">
+        <div class="help-box">
+            <h4>1. Stopping the Echo</h4>
+            <p style="font-size: 14px; margin-bottom: 5px;">High speeds cause vibration. We use an ADXL sensor to cancel it out.</p>
+        </div>
+        <button onclick="runGcode('SHAPER_CALIBRATE AXIS=X', 'Shaking X...', this)" class="btn secondary" style="width:100%;">Calibrate X Axis</button>
+        <button onclick="runGcode('SHAPER_CALIBRATE AXIS=Y', 'Shaking Y...', this)" class="btn secondary" style="width:100%; margin-top:5px;">Calibrate Y Axis</button>
+        <button onclick="runGcode('SAVE_CONFIG', 'Saving...', this)" class="btn" style="background-color: #fab387; color: #1e1e2e; width:100%; margin-top:10px;">Save Config</button>
+    </div>
+
+    <br><br>
+    <div style="display: flex; gap: 10px;">
+        <button id="btn-back-13" class="btn secondary" style="flex: 1;">⬅ Back</button>
+        <button id="btn-next-13" class="btn" style="flex: 2;">Next: Live Z ➔</button>
+    </div>
+</div>
+
+<div id="step-14" class="step-container">
+<div id="step-14" class="step-container">
+    <h2>Step 14: Live First Layer (The Squish)</h2>
+    <div class="help-box">
+        <h4>1. The Real Test</h4>
+        <ol style="font-size: 14px; padding-left: 20px;">
+            <li>Start printing the <strong>40mm Layer Square</strong>.</li>
+            <li>Go to the "Dashboard" or "Control" tab in your printer web screen (Mainsail/Fluidd).</li>
+            <li>Watch the plastic. If the lines have gaps, click the <strong>Z- (Minus)</strong> button to squish them like a pancake.</li>
+            <li>If the plastic looks wavy or rough, click <strong>Z+ (Plus)</strong> to give the nozzle more room.</li>
+        </ol>
+    </div>
+    
+    <a href="cal_files/first_layer_square.stl" download class="btn" style="background-color: #89b4fa; display: block; text-decoration: none; text-align: center; margin-bottom: 10px; font-weight: bold;">📥 Download 40mm Layer Square</a>
+    </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-14" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-14" class="btn" style="flex: 2;">Next: Temp Tower ➔</button>
+            </div>
+        </div>
+
+        <div id="step-15" class="step-container">
+            <h2>Step 15: Temp Tower (The Heat Test)</h2>
+            <div class="help-box">
+                <h4>1. Which temp is best?</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">Every brand of filament is different. We print a tower that changes heat as it goes up.</p>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Slice and print a <strong>Temperature Tower</strong>.</li>
+                    <li>Look for the section with the <strong>least stringing</strong> and the <strong>shiniest finish</strong>.</li>
+                    <li>Look for the section where the bridges (horizontal lines) don't sag.</li>
+                    <li>Write that temperature down for your Slicer.</li>
+                </ol>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-15" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-15" class="btn" style="flex: 2;">Next: Flow Rate ➔</button>
+            </div>
+        </div>
+
+<div id="step-16" class="step-container">
+            <h2>Step 16: Flow Rate (The Wall Test)</h2>
+            <div class="help-box">
+                <h4>1. Important Slicer Settings</h4>
+                <p style="font-size: 14px; color: #f9e2af;">You must slice this solid cube with these specific settings:</p>
+                <ul style="font-size: 13px; text-align: left;">
+                    <li><strong>Walls / Perimeters:</strong> 2</li>
+                    <li><strong>Infill:</strong> 0%</li>
+                    <li><strong>Top Layers:</strong> 0</li>
+                </ul>
+                <p style="font-size: 13px;">Measure the wall thickness at the <strong>VERY TOP</strong> of the cube. Avoid the bottom "bulge"!</p>
+            </div>
+            <a href="cal_files/hollow_flow_cube.stl" download class="btn" style="background-color: #89b4fa; display: block; text-decoration: none; text-align: center; margin-bottom: 10px; font-weight: bold;">📥 Download 20mm Flow Cube</a>
+            
+            <div style="background-color: #1e1e2e; padding: 15px; border-radius: 8px;">
+                <label style="font-size: 12px;">Expected Wall (2x Nozzle):</label>
+                <input type="number" id="flow-expected" value="0.8" class="input-box" style="width: 100%;">
+                <label style="font-size: 12px; display: block; margin-top: 5px;">Actual Measured Thickness:</label>
+                <input type="number" id="flow-measured" class="input-box" placeholder="e.g. 0.84" style="width: 100%;">
+                <label style="font-size: 12px; display: block; margin-top: 5px;">Current Slicer Flow %:</label>
+                <input type="number" id="flow-current" value="100" class="input-box" style="width: 100%;">
+                <button onclick="calcFlow()" class="btn secondary" style="margin-top:10px; width:100%;">Calculate New Flow %</button>
+            </div>
+            <div id="flow-status" class="status-box" style="margin-top: 10px;">Ready for math...</div>
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-16" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-16" class="btn" style="flex: 2;">Next: Pressure Advance ➔</button>
+            </div>
+        </div>
+
+<div id="step-17" class="step-container">
+    <h2>Step 17: Pressure Advance (Sharp Corners)</h2>
+    <div class="help-box">
+        <h4>1. The Tuning Command</h4>
+        <p style="font-size: 14px; margin-bottom: 5px;">Paste this into your <strong>Mainsail Console</strong> before starting:</p>
+        <code style="background: #000; padding: 5px; display: block; color: #a6e3a1; font-size: 11px; margin-bottom: 10px;">TUNING_TOWER COMMAND=SET_PRESSURE_ADVANCE PARAMETER=ADVANCE START=0 FACTOR=.005</code>
+        <p style="font-size: 14px;"><em>(Use FACTOR=.020 for Bowden/Long tubes)</em></p>
+    </div>
+    <div style="background-color: #1e1e2e; padding: 15px; border-radius: 8px;">
+        <input type="number" id="pa-height" class="input-box" placeholder="Best Corner Height (mm)" style="width: 100%;">
+        <select id="pa-factor" class="input-box" style="margin-top:5px; width: 100%;">
+            <option value="0.005">Direct Drive (0.005)</option>
+            <option value="0.020">Bowden (0.020)</option>
+        </select>
+        <button onclick="calcPA()" class="btn secondary" style="margin-top:10px; width:100%;">Calculate Final PA</button>
+    </div>
+    <div id="pa-result" class="status-box" style="margin-top: 10px;">Ready for height...</div>
+    <br>
+    <div style="display: flex; gap: 10px;">
+        <button id="btn-back-17" class="btn secondary" style="flex: 1;">⬅ Back</button>
+        <button id="btn-next-17" class="btn" style="flex: 2;">Next: Speed Limits ➔</button>
+    </div>
+</div>
+
+        <div id="step-18" class="step-container">
+            <h2>Step 18: Max Volumetric Flow (The Speed Limit)</h2>
+            <div class="help-box">
+                <h4>1. How fast can you melt?</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">Every hotend has a speed limit. If you try to print faster than you can melt, the extruder will "click" and strip the filament.</p>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Print a <strong>Max Flow Test</strong>. It will print a block and speed up every few layers.</li>
+                    <li>Watch the surface. When it starts looking <strong>dull, rough, or has holes</strong>, that is your limit.</li>
+                    <li>Note that speed. That is the "Speed Limit" for your printer with that specific filament.</li>
+                </ol>
+            </div>
+            
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-18" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-18" class="btn" style="flex: 2;">Next: Retraction ➔</button>
+            </div>
+        </div>
+
+        <div id="step-19" class="step-container">
+            <h2>Step 19: Retraction (No More Stringing)</h2>
+            <div class="help-box">
+                <h4>1. Pulling it back</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">Retraction pulls the filament back so it doesn't leak while the head is moving between parts.</p>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Print a <strong>Retraction Tower</strong>.</li>
+                    <li>Look for the section with the <strong>ZERO "hairs"</strong> (strings).</li>
+                    <li>Note the <strong>Distance</strong> (e.g., 0.8mm for Direct Drive, 5mm for Bowden).</li>
+                </ol>
+            </div>
+            
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-19" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-19" class="btn" style="flex: 2;">Next: Retraction Speed ➔</button>
+            </div>
+        </div>
+
+        <div id="step-20" class="step-container">
+            <h2>Step 20: Retraction Speed</h2>
+            <div class="help-box">
+                <p style="font-size: 14px; margin-bottom: 5px;">Retracting too slow leaves strings. Retracting too fast causes air bubbles. Find the "sweet spot" (usually 35mm/s to 60mm/s).</p>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Print another tower, changing <strong>Speed</strong> instead of distance.</li>
+                    <li>Choose the cleanest result. Update your Slicer.</li>
+                </ol>
+            </div>
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-20" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-20" class="btn" style="flex: 2;">Next: The Final Test ➔</button>
+            </div>
+        </div>
+
+        <div id="step-21" class="step-container">
+            <h2>Step 21: The Final Trophy (Tolerance)</h2>
+            <div class="help-box">
+                <h4>1. Is it perfect?</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">This is the "Final Boss." We print a set of pegs and holes with different gaps (0.1mm to 0.5mm).</p>
+                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+                    <li>Print a <strong>Clearance / Tolerance Test</strong>.</li>
+                    <li>Try to pull the pegs out.</li>
+                    <li>If you can pull out the <strong>0.1mm or 0.2mm</strong> peg, your printer is <strong>Legendary</strong>.</li>
+                    <li>If you can only pull out 0.5mm, go back to Step 16 and check your Flow Rate again.</li>
+                </ol>
+            </div>
+            
+            <br>
+            <div style="background-color: #a6e3a1; padding: 20px; border-radius: 12px; text-align: center; border: 2px solid #1e1e2e;">
+                <h3 style="color: #1e1e2e; margin-top: 0;">🏆 CONGRATULATIONS! 🏆</h3>
+                <p style="color: #1e1e2e; font-weight: bold; margin-bottom: 0;">You have finished JaCaL's Wizard. Your printer is now a precision manufacturing machine.</p>
+            </div>
+            <br>
+            <button class="btn" style="background-color: #89b4fa; color: #1e1e2e; width:100%; font-weight: bold; padding: 15px;" onclick="alert('Wizard Complete! If you made manual changes to your printer.cfg, make sure to hit SAVE in the Klipper editor now. Enjoy your perfect printer!')">Finish & Close Wizard ➔</button>
+            <br><br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-21" class="btn secondary" style="flex: 1;">⬅ Back</button>
+            </div>
+        </div>
+        </div>
+
+    <script>
+        const moonrakerUrl = window.location.protocol + "//" + window.location.hostname + ":7125";
+        
+        // --- Smart Navigation Engine ---
+        function showStep(showIdx) {
+            document.querySelectorAll('.step-container').forEach(el => el.classList.remove('step-active'));
+            document.getElementById(`step-${showIdx}`).classList.add('step-active');
+            if(showIdx === 5 && !chartInstance) initChart();
+        }
+        for(let i=0; i<=21; i++) {
+            let nxt = document.getElementById(`btn-next-${i}`);
+            let bck = document.getElementById(`btn-back-${i}`);
+            if(nxt) nxt.onclick = () => showStep(i+1);
+            if(bck) bck.onclick = () => showStep(i-1);
+        }
+
+        // --- Hardware Status & Gatekeepers ---
+        function toggleSensorless() {
+            const isSensorless = document.getElementById('toggle-sensorless').checked;
+            const checkEndstops = document.getElementById('check-endstops');
+            const btnQuery = document.getElementById('btn-query-endstops');
+            if(isSensorless) { checkEndstops.checked = true; btnQuery.disabled = true; document.getElementById('endstop-list').innerHTML = "Sensorless bypassed."; } 
+            else { checkEndstops.checked = false; btnQuery.disabled = false; }
+            validateStep1();
+        }
+        function validateStep1() { const ok = document.getElementById('check-endstops').checked && document.getElementById('check-probe').checked; document.getElementById('btn-next-1').disabled = !ok; document.getElementById('btn-next-1').style.opacity = ok ? "1" : "0.5"; }
+        function validateStep2() { const ok = document.getElementById('check-buzz').checked && document.getElementById('check-travel').checked; document.getElementById('btn-next-2').disabled = !ok; document.getElementById('btn-next-2').style.opacity = ok ? "1" : "0.5"; document.getElementById('travel-section').style.display = document.getElementById('check-buzz').checked ? "block" : "none"; }
+
+        // --- GCODE Execution ---
+        async function runGcode(gcode, message, btn) {
+            const originalText = btn.innerText; btn.disabled = true; btn.innerText = "Exec..."; btn.style.backgroundColor = "#fab387"; btn.style.color = "#1e1e2e";
+            try { await fetch(`${moonrakerUrl}/printer/gcode/script`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: gcode }) }); } catch (e) {} 
+            finally { setTimeout(() => { btn.innerText = originalText; btn.style.backgroundColor = ""; btn.style.color = ""; btn.disabled = false; }, 2000); }
+        }
+        async function forceMove(stepper, dist, btn) { runGcode(`FORCE_MOVE STEPPER=${stepper} DISTANCE=${dist} VELOCITY=15`, '', btn); }
+        async function runTestZ(val, statusId) { runGcode(`TESTZ Z=${val}`, '', document.getElementById(statusId)); }
+        async function extrudeFilament(amt, btn) { runGcode("M83",'',btn); setTimeout(()=>runGcode(`G1 E${amt} F60`,'',btn), 500); setTimeout(()=>runGcode("M82",'',btn), 1000); }
+        async function queryEndstops() { runGcode("QUERY_ENDSTOPS",'',document.getElementById('btn-query-endstops')); setTimeout(async () => { try { const r = await fetch(`${moonrakerUrl}/printer/objects/query?query_endstops`); const states = (await r.json()).result.status.query_endstops.last_query; let out = ""; for (const [axis, state] of Object.entries(states)) out += `<strong>${axis.toUpperCase()}</strong>: ${state === 1 ? '<span style="color:#f38ba8;">TRIGGERED</span>' : 'open'}<br>`; document.getElementById('endstop-list').innerHTML = out; } catch (e) {} }, 500); }
+        async function queryProbe() { try { const r = await fetch(`${moonrakerUrl}/printer/objects/query?probe`); const s = (await r.json()).result.status.probe.last_query; document.getElementById('probe-status').innerHTML = `Probe: <strong>${s ? '<span style="color:#f38ba8;">TRIGGERED</span>' : 'open'}</strong>`; } catch (e) {} }
+
+        // --- Math Calculators ---
+        function calcRotation() { const c = parseFloat(document.getElementById('current-rd').value); const a = parseFloat(document.getElementById('actual-ext').value); if(c && a) document.getElementById('calc-result').innerHTML = `Set rotation_distance: <strong>${(c * (a / 100)).toFixed(3)}</strong>`; }
+        function calcCurrent() { const r = parseFloat(document.getElementById('rated-current').value); if(r) document.getElementById('current-result').innerHTML = `Set run_current: <strong>${(r * 0.707 * 0.8).toFixed(3)}</strong>`; }
+        function calcFlow() { const e = parseFloat(document.getElementById('flow-expected').value); const m = parseFloat(document.getElementById('flow-measured').value); const c = parseFloat(document.getElementById('flow-current').value); if(e&&m&&c) document.getElementById('flow-status').innerHTML = `New Slicer Flow: <strong>${(c * (e / m)).toFixed(2)}%</strong>`; }
+        function calcPA() { const h = parseFloat(document.getElementById('pa-height').value); const f = parseFloat(document.getElementById('pa-factor').value); if(h&&f) document.getElementById('pa-status').innerHTML = `Set pressure_advance: <strong>${(h * f).toFixed(3)}</strong>`; }
+        async function calcSkew() { const ac=document.getElementById('skew-ac').value; const bd=document.getElementById('skew-bd').value; const ad=document.getElementById('skew-ad').value; if(ac&&bd&&ad) { document.getElementById('skew-status').innerHTML = "Sending SET_SKEW..."; await runGcode(`SET_SKEW XY=${ac},${bd},${ad}`, '', document.getElementById('skew-status')); await runGcode(`SKEW_PROFILE SAVE=my_skew`, '', document.getElementById('skew-status')); document.getElementById('skew-status').innerHTML = "Skew saved to profile 'my_skew'!"; } }
+
+        // --- Init Data ---
+        async function initWizard() {
+            try {
+                const hubResp = await fetch(`${moonrakerUrl}/printer/objects/query?calibration_hub`); const hub = (await hubResp.json()).result.status.calibration_hub;
+                const grid = document.getElementById('motor-buttons'); grid.innerHTML = ""; 
+                hub.motors.forEach(m => { const btn = document.createElement('button'); btn.className = 'btn-motor btn secondary'; btn.innerText = "Buzz " + m.toUpperCase(); btn.onclick = () => runGcode(`STEPPER_BUZZ STEPPER=${m === 'extruder' ? 'extruder' : 'stepper_'+m}`, '', btn); grid.appendChild(btn); });
+                const rawConfig = (await (await fetch(`${moonrakerUrl}/printer/objects/query?configfile`)).json()).result.status.configfile.config;
+                const alignDiv = document.getElementById('alignment-buttons'); alignDiv.innerHTML = ""; 
+                if (rawConfig.hasOwnProperty('z_tilt')) alignDiv.innerHTML += `<button onclick="runGcode('Z_TILT_ADJUST', '', this)" class="btn secondary">⚖️ Z-Tilt Adjust</button>`;
+                if (rawConfig.hasOwnProperty('quad_gantry_level')) alignDiv.innerHTML += `<button onclick="runGcode('QUAD_GANTRY_LEVEL', '', this)" class="btn secondary">⚖️ Quad Gantry Level (QGL)</button>`;
+            } catch (e) {}
+        }
+        let chartInstance = null;
+        function initChart() { const ctx = document.getElementById('tempChart').getContext('2d'); chartInstance = new Chart(ctx, { type: 'line', data: { labels: Array(60).fill(''), datasets: [{ label: 'Hotend', borderColor: '#f38ba8', data: Array(60).fill(null), pointRadius: 0, tension: 0.2 }, { label: 'Bed', borderColor: '#fab387', data: Array(60).fill(null), pointRadius: 0, tension: 0.2 }] }, options: { animation: false, scales: { y: { beginAtZero: true, max: 280 }, x: { display: false } } } }); setInterval(updateTemps, 1000); }
+        async function updateTemps() { try { const d = (await (await fetch(`${moonrakerUrl}/printer/objects/query?extruder&heater_bed`)).json()).result.status; chartInstance.data.datasets[0].data.shift(); chartInstance.data.datasets[0].data.push(d.extruder.temperature); chartInstance.data.datasets[1].data.shift(); chartInstance.data.datasets[1].data.push(d.heater_bed ? d.heater_bed.temperature : 0); chartInstance.update(); } catch (e) {} }
+        document.getElementById('btn-pid-bed').onclick = () => runGcode(`PID_CALIBRATE HEATER=heater_bed TARGET=${document.getElementById('bed-temp').value}`, '', document.getElementById('btn-pid-bed'));
+        document.getElementById('btn-pid-ext').onclick = () => runGcode(`PID_CALIBRATE HEATER=extruder TARGET=${document.getElementById('ext-temp').value}`, '', document.getElementById('btn-pid-ext'));
+        initWizard();
+
+        function validateStep3() { 
+            const ok = document.getElementById('check-kinematics').checked; 
+            const btn = document.getElementById('btn-next-3'); 
+            btn.disabled = !ok; 
+            btn.style.opacity = ok ? "1" : "0.5"; 
+        }
+        function validateStep4() { 
+            const ok = document.getElementById('check-belts').checked; 
+            const btn = document.getElementById('btn-next-4'); 
+            btn.disabled = !ok; 
+            btn.style.opacity = ok ? "1" : "0.5"; 
+        }
+
+        function validateStep7() { 
+            const ok = document.getElementById('check-currents').checked; 
+            const btn = document.getElementById('btn-next-7'); 
+            btn.disabled = !ok; 
+            btn.style.opacity = ok ? "1" : "0.5"; 
+            }
+
+async function smartMove(axis, dist, btn) {
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.innerText = "Moving...";
+    
+    // THE MAGIC: 
+    // 1. Force the brain to think the current spot is 0.
+    // 2. Move 10mm or 50mm relatively.
+    // 3. Clear the fake position so we don't accidentally 'home' the printer.
+    const gcode = [
+        `SET_KINEMATIC_POSITION ${axis.toUpperCase()}=0`,
+        `G91`, 
+        `G1 ${axis.toUpperCase()}${dist} F900`, 
+        `M400`, 
+        `SET_KINEMATIC_POSITION`, 
+        `G90`
+    ].join('\n');
+
+    try {
+        await fetch(`${moonrakerUrl}/printer/gcode/script`, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ script: gcode }) 
+        });
+    } catch (e) {
+        console.error("Move failed", e);
+    } finally {
+        setTimeout(() => {
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }, 1200); // Slight delay to ensure Klipper finishes the move
+    }
+}
+function runTestZ(val, statusId) { 
+    // This calls the Klipper command for the paper test height adjustment
+    runGcode(`TESTZ Z=${val}`, '', document.getElementById(statusId)); 
+    // This updates the box so the user knows the command actually sent
+    document.getElementById(statusId).innerText = `Sent adjustment: ${val}`;
+}
+
+    </script>
+</body>
+</html>
