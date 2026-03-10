@@ -2,7 +2,7 @@
 This wizard is a 21-step journey to turn your 3D printer into a precision machine. It handles everything from hardware checks to final plastic tuning.
 
 How to Install
-Open Putty or your favorite terminal and log into your printer (usually pi@mainsail.local or biqu@chris-hummsworth).
+Open Putty or your favorite terminal and log into your printer (usually pi@mainsail.local).
 
 Paste this command and hit Enter:
 
