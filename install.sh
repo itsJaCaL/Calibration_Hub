@@ -33,6 +33,9 @@ echo "-> Generating Klipper Macro..."
 cat > $PRINTER_CONFIG_PATH/calibration_hub.cfg <<EOF
 [calibration_hub]
 
+[force_move]
+enable_force_move: True
+
 [gcode_macro JACALS_WIZARD]
 description: Launches JaCaL's Calibration Wizard
 gcode:
@@ -54,10 +57,6 @@ chmod -R 755 $UI_DEST_PATH
 echo "-> Checking printer.cfg for includes..."
 if ! grep -q "\[include calibration_hub.cfg\]" "$PRINTER_CONFIG_PATH/printer.cfg"; then
     sed -i '1i [include calibration_hub.cfg]' "$PRINTER_CONFIG_PATH/printer.cfg"
-fi
-
-if ! grep -q "\[force_move\]" "$PRINTER_CONFIG_PATH/printer.cfg"; then
-    echo -e "\n[force_move]\nenable_force_move: True" >> "$PRINTER_CONFIG_PATH/printer.cfg"
 fi
 
 # 5. Nginx (Using the single-quote method to avoid redirect loops)
