@@ -31,7 +31,12 @@ sudo rm -f /etc/nginx/conf.d/cal_hub.conf
 echo "-> Removing include line from printer.cfg..."
 sed -i '/\[include calibration_hub.cfg\]/d' "$PRINTER_CONFIG_PATH/printer.cfg"
 
-# 6. Restart
+# 6. The Nuke Option (Self-Destruct)
+echo "-> Nuking the source folder..."
+cd ~
+rm -rf ~/Calibration_Hub
+
+# 7. Restart
 echo "-> Restarting services..."
 sudo systemctl restart nginx
 sudo systemctl restart klipper
