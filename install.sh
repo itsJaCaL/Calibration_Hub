@@ -58,6 +58,11 @@ echo "-> Checking printer.cfg for includes..."
 if ! grep -q "\[include calibration_hub.cfg\]" "$PRINTER_CONFIG_PATH/printer.cfg"; then
     sed -i '1i [include calibration_hub.cfg]' "$PRINTER_CONFIG_PATH/printer.cfg"
 fi
+echo "-> Increasing max extrusion limit..."
+if ! grep -q "max_extrude_only_distance" "$PRINTER_CONFIG_PATH/printer.cfg"; then
+    # This finds the [extruder] tag in printer.cfg and drops the new setting right below it
+    sed -i '/\[extruder\]/a max_extrude_only_distance: 150.0' "$PRINTER_CONFIG_PATH/printer.cfg"
+fi
 
 # 5. Nginx (Using the single-quote method to avoid redirect loops)
 echo "-> Configuring Nginx..."

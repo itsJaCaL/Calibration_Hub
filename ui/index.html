@@ -261,8 +261,11 @@
                 </ol>
             </div>
             
-            <button onclick="runGcode('M104 S210', 'Heating...', this)" class="btn secondary">🔥 Heat to 210°C</button>
-            <button onclick="extrudeFilament(100, this)" class="btn secondary" style="margin-top:5px;">⚙️ Extrude 100mm</button>
+<div style="display: flex; gap: 5px;">
+                <button onclick="runGcode('M104 S210', 'Heating...', this)" class="btn secondary" style="flex: 1;">🔥 Heat to 210°C</button>
+                <button onclick="runGcode('M104 S0', 'Cooling...', this)" class="btn secondary" style="flex: 1;">❄️ Cool Nozzle</button>
+            </div>
+            <button onclick="extrudeFilament(100, this)" class="btn secondary" style="margin-top:5px; width: 100%;">⚙️ Extrude 100mm</button>
             <div style="background-color: #1e1e2e; padding: 15px; border-radius: 8px; margin-top:10px;">
                 <input type="number" id="current-rd" value="8.0" step="0.001" class="input-box" placeholder="Current Dist in Config">
                 <input type="number" id="actual-ext" value="95" step="0.1" class="input-box" placeholder="Actual Measured Extrusion">
@@ -339,6 +342,9 @@
                     <li>Click <strong>Accept</strong>, then click <strong>Save Config</strong>.</li>
                 </ol>
             </div>
+            <button onclick="runGcode('G28', 'Homing...', this)" class="btn secondary" style="width:100%; margin-bottom: 5px;">🏠 1. Home All Axes</button>
+            <button onclick="runGcode('PROBE_CALIBRATE', 'Starting...', this)" class="btn secondary" style="width:100%;">2. Start Paper Test</button>
+            <div style="margin-top: 10px; display: flex; gap: 5px;">
             <button onclick="runGcode('PROBE_CALIBRATE', 'Starting...', this)" class="btn secondary" style="width:100%;">1. Start Paper Test</button>
             <div style="margin-top: 10px; display: flex; gap: 5px;">
                 <button onclick="runTestZ('-1.0', 'z-status-9')" class="btn secondary">Down -1.0</button>
@@ -669,7 +675,7 @@
             </div>
         </div>
 
-        
+
     <script>
         let moonrakerUrl = "";
         
@@ -772,6 +778,9 @@ async function initWizard() {
 
         // Load Alignment buttons
         const rawConfig = (await (await fetch(`${moonrakerUrl}/printer/objects/query?configfile`)).json()).result.status.configfile.config;
+        if (rawConfig.hasOwnProperty('extruder') && rawConfig.extruder.rotation_distance) {
+            document.getElementById('current-rd').value = rawConfig.extruder.rotation_distance;
+        }
         const alignDiv = document.getElementById('alignment-buttons'); 
         alignDiv.innerHTML = ""; 
         if (rawConfig.hasOwnProperty('z_tilt')) alignDiv.innerHTML += `<button onclick="runGcode('Z_TILT_ADJUST', '', this)" class="btn secondary">⚖️ Z-Tilt Adjust</button>`;
