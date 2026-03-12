@@ -751,6 +751,29 @@ async function initWizard() {
         alignDiv.innerHTML = ""; 
         if (rawConfig.hasOwnProperty('z_tilt')) alignDiv.innerHTML += `<button onclick="runGcode('Z_TILT_ADJUST', '', this)" class="btn secondary">⚖️ Z-Tilt Adjust</button>`;
         if (rawConfig.hasOwnProperty('quad_gantry_level')) alignDiv.innerHTML += `<button onclick="runGcode('QUAD_GANTRY_LEVEL', '', this)" class="btn secondary">⚖️ Quad Gantry Level (QGL)</button>`;
+        if (rawConfig.hasOwnProperty('screws_tilt_adjust')) alignDiv.innerHTML += `<button onclick="runGcode('SCREWS_TILT_CALCULATE', '', this)" class="btn secondary">⚙️ Screws Tilt Calculate</button>`;
+        if (rawConfig.hasOwnProperty('bed_screws')) alignDiv.innerHTML += `<button onclick="runGcode('BED_SCREWS_ADJUST', '', this)" class="btn secondary">⚙️ Manual Bed Screws</button>`;
+        if (alignDiv.innerHTML === "") {
+            alignDiv.innerHTML = `<div style="background-color: rgba(243, 139, 168, 0.1); border-left: 4px solid #f38ba8; padding: 10px; color: #cdd6f4; font-size: 13px; margin-top: 10px;">
+                <strong style="color:#f38ba8;">⚠️ Missing Config!</strong><br>
+                Klipper doesn't see any bed leveling settings. Let's generate them right now.<br><br>
+                <button onclick="document.getElementById('screw-helper').style.display = 'block'" class="btn" style="background-color: #89b4fa; color: #1e1e2e; width:100%; font-weight:bold; padding:8px;">🛠️ Open Screw Config Generator</button>
+            </div>
+            
+            <div id="screw-helper" style="display:none; margin-top: 10px; background-color: #181825; padding: 15px; border-radius: 8px; border: 1px solid #45475a;">
+                <p style="font-size:13px; color:#f9e2af; margin-top:0;"><strong>1.</strong> Use your printer's screen or Mainsail to jog the nozzle until it is directly above a bed screw.<br><strong>2.</strong> Click the matching button below to record its coordinates.<br><strong>3.</strong> Repeat for all 4 screws.</p>
+                
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <button onclick="getScrewPos('FL', this)" class="btn secondary" style="font-size:12px; padding:8px;">1. Front-Left</button>
+                    <button onclick="getScrewPos('FR', this)" class="btn secondary" style="font-size:12px; padding:8px;">2. Front-Right</button>
+                    <button onclick="getScrewPos('BL', this)" class="btn secondary" style="font-size:12px; padding:8px;">3. Back-Left</button>
+                    <button onclick="getScrewPos('BR', this)" class="btn secondary" style="font-size:12px; padding:8px;">4. Back-Right</button>
+                </div>
+                
+                <p style="font-size:13px; color:#a6adc8; margin-bottom:5px;">Copy and paste this into your <strong>printer.cfg</strong>:</p>
+                <textarea id="screw-config-output" style="width:95%; height:130px; background:#000; color:#a6e3a1; font-family:monospace; font-size:12px; padding:10px; border:1px solid #585b70; border-radius:6px;" readonly>; Waiting for you to click all 4 buttons...</textarea>
+            </div>`;
+        }
         
     } catch (e) {
         grid.innerHTML = `<span style="color:#f38ba8; grid-column: 1 / -1;">JS Error during load: ${e.message}</span>`;
@@ -863,6 +886,46 @@ function runTestZ(val, statusId) {
     document.getElementById(statusId).innerText = `Sent adjustment: ${val}`;
 }
 
+// --- Screw Coordinate Helper ---
+let screwCoords = { FL: null, FR: null, BL: null, BR: null };
+
+async function getScrewPos(pos, btn) {
+    try {
+        // Ask Klipper exactly where the toolhead is sitting right now
+        const r = await fetch(`${moonrakerUrl}/printer/objects/query?toolhead`);
+        const p = (await r.json()).result.status.toolhead.position;
+        
+        // Save the X and Y coordinates (ignoring Z)
+        screwCoords[pos] = `${p[0].toFixed(1)}, ${p[1].toFixed(1)}`;
+        
+        // Update the button to show it worked
+        btn.innerText = `${pos}: ${screwCoords[pos]}`;
+        btn.style.backgroundColor = "#a6e3a1"; // Turn green
+        btn.style.color = "#1e1e2e";
+        
+        checkAllScrews();
+    } catch(e) {
+        btn.innerText = "Error: Klipper not responding";
+    }
+}
+
+function checkAllScrews() {
+    // If all 4 have been recorded, generate the Klipper config block
+    if(screwCoords.FL && screwCoords.FR && screwCoords.BL && screwCoords.BR) {
+        const out = document.getElementById('screw-config-output');
+        out.value = `[bed_screws]\n` +
+                    `screw1: ${screwCoords.FL}\n` +
+                    `screw1_name: front left screw\n` +
+                    `screw2: ${screwCoords.FR}\n` +
+                    `screw2_name: front right screw\n` +
+                    `screw3: ${screwCoords.BR}\n` +
+                    `screw3_name: back right screw\n` +
+                    `screw4: ${screwCoords.BL}\n` +
+                    `screw4_name: back left screw`;
+        
+        out.style.borderColor = "#a6e3a1"; // Highlight the box green
+    }
+}
     </script>
 </body>
 </html>
