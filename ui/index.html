@@ -645,7 +645,7 @@
         </div>
 
     <script>
-        const moonrakerUrl = window.location.protocol + "//" + window.location.hostname + ":7125";
+        let moonrakerUrl = "";
         
         // --- Smart Navigation Engine ---
         function showStep(showIdx) {
@@ -692,17 +692,71 @@
         async function calcSkew() { const ac=document.getElementById('skew-ac').value; const bd=document.getElementById('skew-bd').value; const ad=document.getElementById('skew-ad').value; if(ac&&bd&&ad) { document.getElementById('skew-status').innerHTML = "Sending SET_SKEW..."; await runGcode(`SET_SKEW XY=${ac},${bd},${ad}`, '', document.getElementById('skew-status')); await runGcode(`SKEW_PROFILE SAVE=my_skew`, '', document.getElementById('skew-status')); document.getElementById('skew-status').innerHTML = "Skew saved to profile 'my_skew'!"; } }
 
         // --- Init Data ---
-        async function initWizard() {
-            try {
-                const hubResp = await fetch(`${moonrakerUrl}/printer/objects/query?calibration_hub`); const hub = (await hubResp.json()).result.status.calibration_hub;
-                const grid = document.getElementById('motor-buttons'); grid.innerHTML = ""; 
-                hub.motors.forEach(m => { const btn = document.createElement('button'); btn.className = 'btn-motor btn secondary'; btn.innerText = "Buzz " + m.toUpperCase(); btn.onclick = () => runGcode(`STEPPER_BUZZ STEPPER=${m === 'extruder' ? 'extruder' : 'stepper_'+m}`, '', btn); grid.appendChild(btn); });
-                const rawConfig = (await (await fetch(`${moonrakerUrl}/printer/objects/query?configfile`)).json()).result.status.configfile.config;
-                const alignDiv = document.getElementById('alignment-buttons'); alignDiv.innerHTML = ""; 
-                if (rawConfig.hasOwnProperty('z_tilt')) alignDiv.innerHTML += `<button onclick="runGcode('Z_TILT_ADJUST', '', this)" class="btn secondary">⚖️ Z-Tilt Adjust</button>`;
-                if (rawConfig.hasOwnProperty('quad_gantry_level')) alignDiv.innerHTML += `<button onclick="runGcode('QUAD_GANTRY_LEVEL', '', this)" class="btn secondary">⚖️ Quad Gantry Level (QGL)</button>`;
-            } catch (e) {}
+async function initWizard() {
+    const grid = document.getElementById('motor-buttons');
+    grid.innerHTML = "<span style='grid-column: 1 / -1; text-align: center;'>Scanning ports for an active printer...</span>";
+    
+    const baseIp = window.location.protocol + "//" + window.location.hostname;
+    const ports = [7125, 7126, 7127, 7128];
+    let found = false;
+
+    // 1. Scan the ports dynamically
+    for (let port of ports) {
+        try {
+            // Give each port 1 second to respond so we don't hang on dead printers
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 1000);
+            
+            const res = await fetch(`${baseIp}:${port}/printer/objects/query?calibration_hub`, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            
+            const data = await res.json();
+            
+            // If it responds AND has our custom object, we found our target
+            if (data.result && data.result.status && data.result.status.calibration_hub) {
+                moonrakerUrl = `${baseIp}:${port}`;
+                found = true;
+                console.log(`Locked onto printer at port ${port}`);
+                break; 
+            }
+        } catch(e) { 
+            // Port dead or missing object, silently skip to the next one
         }
+    }
+
+    // 2. Error out if nothing is found
+    if (!found) {
+        grid.innerHTML = `<span style="color:#f38ba8; grid-column: 1 / -1;">Error: Scanned ports 7125-7128. Could not find any printer with calibration_hub loaded. Is Klipper halted?</span>`;
+        return;
+    }
+
+    // 3. We found it, now load the motors
+    try {
+        const hubResp = await fetch(`${moonrakerUrl}/printer/objects/query?calibration_hub`);
+        const hub = (await hubResp.json()).result.status.calibration_hub;
+        
+        grid.innerHTML = ""; 
+        hub.motors.forEach(m => { 
+            const btn = document.createElement('button'); 
+            btn.className = 'btn-motor btn secondary'; 
+            btn.innerText = "Buzz " + m.toUpperCase(); 
+            btn.onclick = () => runGcode(`STEPPER_BUZZ STEPPER=${m === 'extruder' ? 'extruder' : 'stepper_'+m}`, '', btn); 
+            grid.appendChild(btn); 
+        });
+
+        // Load Alignment buttons
+        const rawConfig = (await (await fetch(`${moonrakerUrl}/printer/objects/query?configfile`)).json()).result.status.configfile.config;
+        const alignDiv = document.getElementById('alignment-buttons'); 
+        alignDiv.innerHTML = ""; 
+        if (rawConfig.hasOwnProperty('z_tilt')) alignDiv.innerHTML += `<button onclick="runGcode('Z_TILT_ADJUST', '', this)" class="btn secondary">⚖️ Z-Tilt Adjust</button>`;
+        if (rawConfig.hasOwnProperty('quad_gantry_level')) alignDiv.innerHTML += `<button onclick="runGcode('QUAD_GANTRY_LEVEL', '', this)" class="btn secondary">⚖️ Quad Gantry Level (QGL)</button>`;
+        
+    } catch (e) {
+        grid.innerHTML = `<span style="color:#f38ba8; grid-column: 1 / -1;">JS Error during load: ${e.message}</span>`;
+    }
+}
+
+
 async function runPID(heater, tempId, btn) {
     const target = document.getElementById(tempId).value;
     const statusBox = document.getElementById('pid-status');
@@ -738,6 +792,15 @@ async function runPID(heater, tempId, btn) {
 // Attach the new function to your existing buttons
 document.getElementById('btn-pid-bed').onclick = function() { runPID('heater_bed', 'bed-temp', this); };
 document.getElementById('btn-pid-ext').onclick = function() { runPID('extruder', 'ext-temp', this); };
+
+// --- ADD THIS STUFF BACK IN ---
+let chartInstance = null;
+function initChart() { const ctx = document.getElementById('tempChart').getContext('2d'); chartInstance = new Chart(ctx, { type: 'line', data: { labels: Array(60).fill(''), datasets: [{ label: 'Hotend', borderColor: '#f38ba8', data: Array(60).fill(null), pointRadius: 0, tension: 0.2 }, { label: 'Bed', borderColor: '#fab387', data: Array(60).fill(null), pointRadius: 0, tension: 0.2 }] }, options: { animation: false, scales: { y: { beginAtZero: true, max: 280 }, x: { display: false } } } }); setInterval(updateTemps, 1000); }
+async function updateTemps() { try { const d = (await (await fetch(`${moonrakerUrl}/printer/objects/query?extruder&heater_bed`)).json()).result.status; chartInstance.data.datasets[0].data.shift(); chartInstance.data.datasets[0].data.push(d.extruder.temperature); chartInstance.data.datasets[1].data.shift(); chartInstance.data.datasets[1].data.push(d.heater_bed ? d.heater_bed.temperature : 0); chartInstance.update(); } catch (e) {} }
+
+// This actually fires the whole startup sequence!
+initWizard();
+// ------------------------------
 
         function validateStep3() { 
             const ok = document.getElementById('check-kinematics').checked; 
