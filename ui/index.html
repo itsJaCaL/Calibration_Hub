@@ -490,17 +490,29 @@
 
         <div id="step-15" class="step-container">
             <h2>Step 15: Temp Tower (The Heat Test)</h2>
+            
             <div class="help-box">
-                <h4>1. Which temp is best?</h4>
-                <p style="font-size: 14px; margin-bottom: 5px;">Every brand of filament is different. We print a tower that changes heat as it goes up.</p>
+                <h4>1. How to generate the tower</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">You cannot just download a tower model and print it normally. The printer needs specific G-code to change the heat at every level.</p>
+                <ul style="font-size: 13px; text-align: left; margin-top: 5px; padding-left: 20px;">
+                    <li style="margin-bottom: 5px;"><strong style="color: #a6e3a1;">OrcaSlicer:</strong> Top Menu ➔ Calibration ➔ Temperature. (It generates the model and G-code for you).</li>
+                    <li style="margin-bottom: 5px;"><strong style="color: #a6e3a1;">SuperSlicer:</strong> Top Menu ➔ Calibration ➔ Temperature Calibration.</li>
+                    <li style="margin-bottom: 5px;"><strong style="color: #a6e3a1;">Cura:</strong> Click Marketplace (top right) ➔ Install "AutoTowers Generator". Restart Cura, then go to Extensions ➔ AutoTowers.</li>
+                </ul>
+            </div>
+
+            <div class="help-box">
+                <h4>2. Which temp is best?</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">Every brand of filament is different. Once it finishes printing, look for:</p>
                 <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
-                    <li>Slice and print a <strong>Temperature Tower</strong>.</li>
-                    <li>Look for the section with the <strong>least stringing</strong> and the <strong>shiniest finish</strong>.</li>
-                    <li>Look for the section where the bridges (horizontal lines) don't sag.</li>
-                    <li>Write that temperature down for your Slicer.</li>
+                    <li>The section with the <strong>least stringing</strong>.</li>
+                    <li>The section with the <strong>shiniest, cleanest finish</strong>.</li>
+                    <li>The section where the bridges (horizontal gaps) don't sag.</li>
+                    <li>Write the winning temperature down and save it in your Slicer's filament profile.</li>
                 </ol>
             </div>
             
+            <br>
             <div style="display: flex; gap: 10px;">
                 <button id="btn-back-15" class="btn secondary" style="flex: 1;">⬅ Back</button>
                 <button id="btn-next-15" class="btn" style="flex: 2;">Next: Flow Rate ➔</button>
@@ -539,38 +551,47 @@
         </div>
 
     <div id="step-17" class="step-container">
-    <h2>Step 17: Pressure Advance (Sharp Corners)</h2>
-    <div class="help-box">
-        <h4>1. The Tuning Command</h4>
-        <p style="font-size: 14px; margin-bottom: 5px;">Paste this into your <strong>Mainsail Console</strong> before starting:</p>
-        <code style="background: #000; padding: 5px; display: block; color: #a6e3a1; font-size: 11px; margin-bottom: 10px;">TUNING_TOWER COMMAND=SET_PRESSURE_ADVANCE PARAMETER=ADVANCE START=0 FACTOR=.005</code>
-        <p style="font-size: 14px;"><em>(Use FACTOR=.020 for Bowden/Long tubes)</em></p>
-    </div>
-    <div style="background-color: #1e1e2e; padding: 15px; border-radius: 8px;">
-        <input type="number" id="pa-height" class="input-box" placeholder="Best Corner Height (mm)" style="width: 100%;">
-        <select id="pa-factor" class="input-box" style="margin-top:5px; width: 100%;">
-            <option value="0.005">Direct Drive (0.005)</option>
-            <option value="0.020">Bowden (0.020)</option>
-        </select>
-        <button onclick="calcPA()" class="btn secondary" style="margin-top:10px; width:100%;">Calculate Final PA</button>
-    </div>
-    <div id="pa-result" class="status-box" style="margin-top: 10px;">Ready for height...</div>
-    <br>
-    <div style="display: flex; gap: 10px;">
-        <button id="btn-back-17" class="btn secondary" style="flex: 1;">⬅ Back</button>
-        <button id="btn-next-17" class="btn" style="flex: 2;">Next: Speed Limits ➔</button>
-    </div>
-</div>
+            <h2>Step 17: Pressure Advance (Sharp Corners)</h2>
+            <div class="help-box">
+                <h4>1. Generating the Test</h4>
+                <p style="font-size: 14px; margin-bottom: 5px;">Pressure Advance (PA) stops corners from bulging. We need to print a PA Tower or Line test.</p>
+                <ul style="font-size: 13px; text-align: left; margin-top: 5px; padding-left: 20px;">
+                    <li style="margin-bottom: 5px;"><strong style="color: #a6e3a1;">OrcaSlicer (Easiest):</strong> Top Menu ➔ Calibration ➔ Pressure Advance. Choose "PA Tower" or "Line". It does all the math for you. Skip the Klipper command below.</li>
+                    <li><strong style="color: #a6e3a1;">Other Slicers:</strong> Download a PA Tower STL. Before you hit print, paste this into your Mainsail Console:</li>
+                </ul>
+                <code style="background: #000; padding: 5px; display: block; color: #a6e3a1; font-size: 11px; margin-top: 5px; margin-bottom: 10px;">TUNING_TOWER COMMAND=SET_PRESSURE_ADVANCE PARAMETER=ADVANCE START=0 FACTOR=.005</code>
+                <p style="font-size: 12px; color: #f9e2af; margin-top: 0;"><em>(Change FACTOR to .020 if you use a Bowden tube).</em></p>
+            </div>
+            
+            <div style="background-color: #1e1e2e; padding: 15px; border-radius: 8px;">
+                <input type="number" id="pa-height" class="input-box" placeholder="Measured Height of Best Corner (mm)" style="width: 100%;">
+                <select id="pa-factor" class="input-box" style="margin-top:5px; width: 100%;">
+                    <option value="0.005">Direct Drive Factor (0.005)</option>
+                    <option value="0.020">Bowden Factor (0.020)</option>
+                </select>
+                <button onclick="calcPA()" class="btn secondary" style="margin-top:10px; width:100%;">Calculate Final PA</button>
+            </div>
+            <div id="pa-result" class="status-box" style="margin-top: 10px;">Ready for height...</div>
+            <br>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-back-17" class="btn secondary" style="flex: 1;">⬅ Back</button>
+                <button id="btn-next-17" class="btn" style="flex: 2;">Next: Speed Limits ➔</button>
+            </div>
+        </div>
 
         <div id="step-18" class="step-container">
             <h2>Step 18: Max Volumetric Flow (The Speed Limit)</h2>
             <div class="help-box">
                 <h4>1. How fast can you melt?</h4>
-                <p style="font-size: 14px; margin-bottom: 5px;">Every hotend has a speed limit. If you try to print faster than you can melt, the extruder will "click" and strip the filament.</p>
-                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
-                    <li>Print a <strong>Max Flow Test</strong>. It will print a block and speed up every few layers.</li>
+                <p style="font-size: 14px; margin-bottom: 5px;">If you try to print faster than the hotend can melt plastic, the extruder will "click" and strip the filament.</p>
+                <ul style="font-size: 13px; text-align: left; margin-top: 5px; padding-left: 20px;">
+                    <li style="margin-bottom: 5px;"><strong style="color: #a6e3a1;">OrcaSlicer:</strong> Top Menu ➔ Calibration ➔ Max Flowrate.</li>
+                    <li><strong style="color: #a6e3a1;">Other Slicers:</strong> Search CNC Kitchen Max Flow Test online.</li>
+                </ul>
+                <ol style="margin-top: 10px; padding-left: 20px; font-size: 14px;">
+                    <li>Print the test. It will print a block and pump more plastic every few layers.</li>
                     <li>Watch the surface. When it starts looking <strong>dull, rough, or has holes</strong>, that is your limit.</li>
-                    <li>Note that speed. That is the "Speed Limit" for your printer with that specific filament.</li>
+                    <li>Measure the height where it failed, do the math (or let OrcaSlicer tell you), and save that "Max Volumetric Speed" in your filament profile.</li>
                 </ol>
             </div>
             
@@ -582,14 +603,18 @@
         </div>
 
         <div id="step-19" class="step-container">
-            <h2>Step 19: Retraction (No More Stringing)</h2>
+            <h2>Step 19: Retraction Distance</h2>
             <div class="help-box">
                 <h4>1. Pulling it back</h4>
-                <p style="font-size: 14px; margin-bottom: 5px;">Retraction pulls the filament back so it doesn't leak while the head is moving between parts.</p>
-                <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
-                    <li>Print a <strong>Retraction Tower</strong>.</li>
-                    <li>Look for the section with the <strong>ZERO "hairs"</strong> (strings).</li>
-                    <li>Note the <strong>Distance</strong> (e.g., 0.8mm for Direct Drive, 5mm for Bowden).</li>
+                <p style="font-size: 14px; margin-bottom: 5px;">Retraction pulls the filament back so it doesn't leak while the head is moving. We need to find the right distance.</p>
+                <ul style="font-size: 13px; text-align: left; margin-top: 5px; padding-left: 20px;">
+                    <li style="margin-bottom: 5px;"><strong style="color: #a6e3a1;">OrcaSlicer:</strong> Top Menu ➔ Calibration ➔ Retraction Test.</li>
+                    <li><strong style="color: #a6e3a1;">Cura:</strong> Extensions ➔ AutoTowers ➔ Retract Tower.</li>
+                </ul>
+                <ol style="margin-top: 10px; padding-left: 20px; font-size: 14px;">
+                    <li>Print the tower.</li>
+                    <li>Look for the lowest height section with <strong>ZERO "hairs"</strong> (strings).</li>
+                    <li>Note the <strong>Distance</strong> (e.g., 0.8mm for Direct Drive, 5mm for Bowden) and save it in your Slicer.</li>
                 </ol>
             </div>
             
@@ -603,10 +628,10 @@
         <div id="step-20" class="step-container">
             <h2>Step 20: Retraction Speed</h2>
             <div class="help-box">
-                <p style="font-size: 14px; margin-bottom: 5px;">Retracting too slow leaves strings. Retracting too fast causes air bubbles. Find the "sweet spot" (usually 35mm/s to 60mm/s).</p>
+                <p style="font-size: 14px; margin-bottom: 5px;">Retracting too slow leaves strings. Retracting too fast causes air bubbles and clogs. Find the "sweet spot" (usually 30mm/s to 60mm/s).</p>
                 <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
-                    <li>Print another tower, changing <strong>Speed</strong> instead of distance.</li>
-                    <li>Choose the cleanest result. Update your Slicer.</li>
+                    <li>Generate another Retraction Tower, but this time, set the slicer to change the <strong>Speed</strong> instead of the distance. (In Orca, it's the second Retraction calibration option).</li>
+                    <li>Choose the cleanest result. Update your Slicer settings.</li>
                 </ol>
             </div>
             <br>
@@ -620,16 +645,18 @@
             <h2>Step 21: The Final Trophy (Tolerance)</h2>
             <div class="help-box">
                 <h4>1. Is it perfect?</h4>
-                <p style="font-size: 14px; margin-bottom: 5px;">This is the "Final Boss." We print a set of pegs and holes with different gaps (0.1mm to 0.5mm).</p>
+                <p style="font-size: 14px; margin-bottom: 5px;">This is the "Final Boss." We print a set of pegs with different gaps (0.1mm to 0.5mm) to see how accurate your printer is.</p>
                 <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
-                    <li>Print a <strong>Clearance / Tolerance Test</strong>.</li>
-                    <li>Try to pull the pegs out.</li>
-                    <li>If you can pull out the <strong>0.1mm or 0.2mm</strong> peg, your printer is <strong>Legendary</strong>.</li>
-                    <li>If you can only pull out 0.5mm, go back to Step 16 and check your Flow Rate again.</li>
+                    <li>Download and print the <strong>Tolerance Test</strong> below.</li>
+                    <li>Wait for it to cool, then try to pull or twist the pegs out.</li>
+                    <li>If you can free the <strong>0.1mm or 0.2mm</strong> peg, your printer is <strong>Legendary</strong>.</li>
+                    <li>If you can only free the 0.5mm peg, go back to Step 16 and check your Flow Rate again. You are likely over-extruding.</li>
                 </ol>
             </div>
             
+            <a href="cal_files/tolerance_test.stl" download class="btn" style="background-color: #89b4fa; display: block; text-decoration: none; text-align: center; margin-bottom: 10px; font-weight: bold;">📥 Download Tolerance Test</a>
             <br>
+            
             <div style="background-color: #a6e3a1; padding: 20px; border-radius: 12px; text-align: center; border: 2px solid #1e1e2e;">
                 <h3 style="color: #1e1e2e; margin-top: 0;">🏆 CONGRATULATIONS! 🏆</h3>
                 <p style="color: #1e1e2e; font-weight: bold; margin-bottom: 0;">You have finished JaCaL's Wizard. Your printer is now a precision manufacturing machine.</p>
@@ -641,8 +668,8 @@
                 <button id="btn-back-21" class="btn secondary" style="flex: 1;">⬅ Back</button>
             </div>
         </div>
-        </div>
 
+        
     <script>
         let moonrakerUrl = "";
         
