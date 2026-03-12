@@ -120,26 +120,27 @@
                 </label>
             </div>
             
-            <div id="travel-section" style="display: none; margin-top: 20px;">
-                <hr>
-                <div class="help-box">
-                    <h4>2. Travel Direction</h4>
-                    <p style="font-size: 14px; margin-bottom: 5px;"><strong style="color: #f38ba8;">⚠️ CRITICAL: Use your hands to physically push the print head to the exact center of the bed right now!</strong></p>
-                    <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
-                        <li>Click <strong>Move X Left</strong>. If your head moves diagonally, don't panic! It just means your printer uses CoreXY logic.</li>
-                        <li>The toolhead MUST move generally toward the <strong>Left</strong> side.</li>
-                    </ol>
-                </div>
-                <div class="motor-grid">
-                    <button onclick="smartMove('x', -20, this)" class="btn secondary">Move X Left (-20mm)</button>
-                    <button onclick="smartMove('y', -20, this)" class="btn secondary">Move Y Forward (-20mm)</button>
-                </div>
-                <div style="margin-top: 15px; background-color: #181825; padding: 10px; border-radius: 8px;">
-                    <label style="color: #a6e3a1; font-weight: bold; cursor: pointer;">
-                        <input type="checkbox" id="check-travel" onchange="validateStep2()"> The toolhead moved the correct directions
-                    </label>
-                </div>
-            </div>
+<div id="travel-section" style="display: none; margin-top: 20px;">
+    <hr>
+    <div class="help-box">
+        <h4>2. Travel Direction</h4>
+        <p style="font-size: 14px; margin-bottom: 5px;"><strong style="color: #f38ba8;">⚠️ CRITICAL: Use your hands to physically push the print head to the exact center of the bed right now!</strong></p>
+        <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
+            <li>Click <strong>Move X Right</strong>. The print head MUST move toward the <strong>Right</strong> side.</li>
+            <li>Click <strong>Move Y Positive</strong>. If your printer moves the bed (Bed-Slinger), the bed should move <strong>Forward</strong> (towards you). If your printer moves the head instead, the head should move <strong>Back</strong> (away from you).</li>
+            <li><em>Note: If your head moves diagonally, don't panic! It just means your printer uses CoreXY logic, but it should still generally head towards the Right/Back.</em></li>
+        </ol>
+    </div>
+    <div class="motor-grid">
+        <button onclick="smartMove('x', 20, this)" class="btn secondary">Move X Right (+20mm)</button>
+        <button onclick="smartMove('y', 20, this)" class="btn secondary">Move Y Positive (+20mm)</button>
+    </div>
+    <div style="margin-top: 15px; background-color: #181825; padding: 10px; border-radius: 8px;">
+        <label style="color: #a6e3a1; font-weight: bold; cursor: pointer;">
+            <input type="checkbox" id="check-travel" onchange="validateStep2()"> The toolhead moved the correct directions
+        </label>
+    </div>
+</div>
             <br>
             <div style="display: flex; gap: 10px;">
                 <button id="btn-back-2" class="btn secondary" style="flex: 1;">⬅ Back</button>
