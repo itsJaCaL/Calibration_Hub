@@ -222,7 +222,7 @@
                 <p style="font-size: 14px; margin-bottom: 5px;">We need to teach your printer how to hold a temperature without wobbling up and down.</p>
                 <ol style="margin-top: 5px; padding-left: 20px; font-size: 14px;">
                     <li>Click <strong>Tune Bed</strong>. The printer will heat up and cool down 5 times. This can take up to 30 minutes</li>
-                    <li>Wait for the graph to flatten out and the status to say <strong>Complete</strong>.</li>
+                    <li>Wait for the graph to flatten out completely. The temperature line MUST be stable before you continue.</li>
                     <li>Repeat this for the <strong>Hotend</strong>.</li>
                     <li><strong>CRITICAL:</strong> Once both are done, click <strong>💾 Save Config</strong>. The printer will restart. Do not close this page</li>
                 </ol>
@@ -508,7 +508,7 @@
             </div>
         </div>
 
-<div id="step-16" class="step-container">
+        <div id="step-16" class="step-container">
             <h2>Step 16: Flow Rate (The Wall Test)</h2>
             <div class="help-box">
                 <h4>1. Important Slicer Settings</h4>
@@ -539,7 +539,7 @@
             </div>
         </div>
 
-<div id="step-17" class="step-container">
+    <div id="step-17" class="step-container">
     <h2>Step 17: Pressure Advance (Sharp Corners)</h2>
     <div class="help-box">
         <h4>1. The Tuning Command</h4>
@@ -703,12 +703,41 @@
                 if (rawConfig.hasOwnProperty('quad_gantry_level')) alignDiv.innerHTML += `<button onclick="runGcode('QUAD_GANTRY_LEVEL', '', this)" class="btn secondary">⚖️ Quad Gantry Level (QGL)</button>`;
             } catch (e) {}
         }
-        let chartInstance = null;
-        function initChart() { const ctx = document.getElementById('tempChart').getContext('2d'); chartInstance = new Chart(ctx, { type: 'line', data: { labels: Array(60).fill(''), datasets: [{ label: 'Hotend', borderColor: '#f38ba8', data: Array(60).fill(null), pointRadius: 0, tension: 0.2 }, { label: 'Bed', borderColor: '#fab387', data: Array(60).fill(null), pointRadius: 0, tension: 0.2 }] }, options: { animation: false, scales: { y: { beginAtZero: true, max: 280 }, x: { display: false } } } }); setInterval(updateTemps, 1000); }
-        async function updateTemps() { try { const d = (await (await fetch(`${moonrakerUrl}/printer/objects/query?extruder&heater_bed`)).json()).result.status; chartInstance.data.datasets[0].data.shift(); chartInstance.data.datasets[0].data.push(d.extruder.temperature); chartInstance.data.datasets[1].data.shift(); chartInstance.data.datasets[1].data.push(d.heater_bed ? d.heater_bed.temperature : 0); chartInstance.update(); } catch (e) {} }
-        document.getElementById('btn-pid-bed').onclick = () => runGcode(`PID_CALIBRATE HEATER=heater_bed TARGET=${document.getElementById('bed-temp').value}`, '', document.getElementById('btn-pid-bed'));
-        document.getElementById('btn-pid-ext').onclick = () => runGcode(`PID_CALIBRATE HEATER=extruder TARGET=${document.getElementById('ext-temp').value}`, '', document.getElementById('btn-pid-ext'));
-        initWizard();
+async function runPID(heater, tempId, btn) {
+    const target = document.getElementById(tempId).value;
+    const statusBox = document.getElementById('pid-status');
+
+    // Lock the button permanently for this session so they can't double-click
+    btn.disabled = true;
+    btn.style.backgroundColor = "#fab387";
+    btn.style.color = "#1e1e2e";
+    btn.innerText = "Tuning... Watch Graph!";
+
+    // If it's the hotend, blast the part fan first to prevent thermal runaway errors later
+    if (heater === 'extruder') {
+        statusBox.innerHTML = "Turning on part cooling fan...<br>";
+        try {
+            await fetch(`${moonrakerUrl}/printer/gcode/script`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script: "M106 S255" })
+            });
+        } catch(e) {}
+    }
+
+    statusBox.innerHTML += `Starting PID tune for ${heater} at ${target}°C. <br><strong style="color:#f38ba8;">DO NOT CLICK ANYTHING</strong> until the graph finishes its 5 waves and the line goes completely flat.`;
+
+    // Fire and forget. We DO NOT await this fetch because a 10-minute command will cause a browser timeout.
+    fetch(`${moonrakerUrl}/printer/gcode/script`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: `PID_CALIBRATE HEATER=${heater} TARGET=${target}` })
+    }).catch(e => console.log("Fetch timed out. This is expected for long PID tunes."));
+}
+
+// Attach the new function to your existing buttons
+document.getElementById('btn-pid-bed').onclick = function() { runPID('heater_bed', 'bed-temp', this); };
+document.getElementById('btn-pid-ext').onclick = function() { runPID('extruder', 'ext-temp', this); };
 
         function validateStep3() { 
             const ok = document.getElementById('check-kinematics').checked; 
