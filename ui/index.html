@@ -753,6 +753,7 @@ async function initWizard() {
         if (rawConfig.hasOwnProperty('quad_gantry_level')) alignDiv.innerHTML += `<button onclick="runGcode('QUAD_GANTRY_LEVEL', '', this)" class="btn secondary">⚖️ Quad Gantry Level (QGL)</button>`;
         if (rawConfig.hasOwnProperty('screws_tilt_adjust')) alignDiv.innerHTML += `<button onclick="runGcode('SCREWS_TILT_CALCULATE', '', this)" class="btn secondary">⚙️ Screws Tilt Calculate</button>`;
         if (rawConfig.hasOwnProperty('bed_screws')) alignDiv.innerHTML += `<button onclick="runGcode('BED_SCREWS_ADJUST', '', this)" class="btn secondary">⚙️ Manual Bed Screws</button>`;
+// If Klipper doesn't have ANY of the above, give them the interactive Helper
         if (alignDiv.innerHTML === "") {
             alignDiv.innerHTML = `<div style="background-color: rgba(243, 139, 168, 0.1); border-left: 4px solid #f38ba8; padding: 10px; color: #cdd6f4; font-size: 13px; margin-top: 10px;">
                 <strong style="color:#f38ba8;">⚠️ Missing Config!</strong><br>
@@ -761,8 +762,27 @@ async function initWizard() {
             </div>
             
             <div id="screw-helper" style="display:none; margin-top: 10px; background-color: #181825; padding: 15px; border-radius: 8px; border: 1px solid #45475a;">
-                <p style="font-size:13px; color:#f9e2af; margin-top:0;"><strong>1.</strong> Use your printer's screen or Mainsail to jog the nozzle until it is directly above a bed screw.<br><strong>2.</strong> Click the matching button below to record its coordinates.<br><strong>3.</strong> Repeat for all 4 screws.</p>
                 
+                <div style="background-color: #1e1e2e; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+                    <p style="font-size:13px; color:#f9e2af; margin-top:0; margin-bottom:10px;"><strong>1. Prepare</strong></p>
+                    <button onclick="runGcode('G28\\nG1 Z5 F600', 'Homing...', this)" class="btn secondary" style="width:100%; font-weight:bold;">🏠 Home All & Lift Z to 5mm</button>
+                    
+                    <p style="font-size:13px; color:#f9e2af; margin-top:15px; margin-bottom:10px;"><strong>2. Jog Nozzle</strong> (Get it directly over a screw)</p>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 5px;">
+                        <button onclick="jogToolhead('X', -10, this)" class="btn secondary">X -10</button>
+                        <button onclick="jogToolhead('X', -1, this)" class="btn secondary">X -1</button>
+                        <button onclick="jogToolhead('X', 1, this)" class="btn secondary">X +1</button>
+                        <button onclick="jogToolhead('X', 10, this)" class="btn secondary">X +10</button>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;">
+                        <button onclick="jogToolhead('Y', -10, this)" class="btn secondary">Y -10</button>
+                        <button onclick="jogToolhead('Y', -1, this)" class="btn secondary">Y -1</button>
+                        <button onclick="jogToolhead('Y', 1, this)" class="btn secondary">Y +1</button>
+                        <button onclick="jogToolhead('Y', 10, this)" class="btn secondary">Y +10</button>
+                    </div>
+                </div>
+
+                <p style="font-size:13px; color:#f9e2af; margin-top:0; margin-bottom:10px;"><strong>3. Record Position</strong></p>
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                     <button onclick="getScrewPos('FL', this)" class="btn secondary" style="font-size:12px; padding:8px;">1. Front-Left</button>
                     <button onclick="getScrewPos('FR', this)" class="btn secondary" style="font-size:12px; padding:8px;">2. Front-Right</button>
@@ -770,7 +790,7 @@ async function initWizard() {
                     <button onclick="getScrewPos('BR', this)" class="btn secondary" style="font-size:12px; padding:8px;">4. Back-Right</button>
                 </div>
                 
-                <p style="font-size:13px; color:#a6adc8; margin-bottom:5px;">Copy and paste this into your <strong>printer.cfg</strong>:</p>
+                <p style="font-size:13px; color:#a6adc8; margin-top:15px; margin-bottom:5px;">Copy and paste this into your <strong>printer.cfg</strong>:</p>
                 <textarea id="screw-config-output" style="width:95%; height:130px; background:#000; color:#a6e3a1; font-family:monospace; font-size:12px; padding:10px; border:1px solid #585b70; border-radius:6px;" readonly>; Waiting for you to click all 4 buttons...</textarea>
             </div>`;
         }
@@ -926,6 +946,34 @@ function checkAllScrews() {
         out.style.borderColor = "#a6e3a1"; // Highlight the box green
     }
 }
+
+// A safe jogging function that doesn't mess up Klipper's absolute coordinates
+async function jogToolhead(axis, dist, btn) {
+    const originalText = btn.innerText;
+    btn.disabled = true;
+    btn.style.backgroundColor = "#585b70"; // Make it look pressed
+    
+    // G91 = Relative mode, G1 = Move, G90 = Back to Absolute mode
+    const gcode = `G91\nG1 ${axis.toUpperCase()}${dist} F3000\nG90`;
+    
+    try {
+        await fetch(`${moonrakerUrl}/printer/gcode/script`, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ script: gcode }) 
+        });
+    } catch(e) {
+        console.error("Jog failed", e);
+    } finally {
+        setTimeout(() => { 
+            btn.innerText = originalText; 
+            btn.style.backgroundColor = ""; 
+            btn.disabled = false; 
+        }, 400); // Quick unlock so they can click it fast
+    }
+}
+
+
     </script>
 </body>
 </html>
