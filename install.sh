@@ -12,7 +12,7 @@ echo -e "${CYAN}=====================================${NC}"
 echo -e "${BOLD} Installing JaCaL's Calibration Wizard...${NC}"
 echo -e "${CYAN}=====================================${NC}"
 
-# 1. Environment Detection & Variable Setup (Beefed up for Neptune/Sonic Pads)
+# 1. Environment Detection & Variable Setup
 if grep -iqE "openwrt|sonic|neptune" /etc/os-release /etc/issue 2>/dev/null || hostname | grep -iq "spad" || ! command -v sudo >/dev/null 2>&1; then
     echo "-> Creality Sonic Pad / Embedded environment detected."
     if [ "$(id -u)" -ne 0 ]; then
@@ -23,8 +23,9 @@ if grep -iqE "openwrt|sonic|neptune" /etc/os-release /etc/issue 2>/dev/null || h
     SUDO_CMD=""
     KLIPPER_EXTRAS_PATH="/usr/share/klipper/klippy/extras"
     PRINTER_CONFIG_PATH="/root/printer_data/config"
+    KLIPPER_RESTART_CMD="/etc/init.d/klipper_service restart"
+    NGINX_RESTART_CMD="/etc/init.d/nginx restart"
     
-    # BusyBox specific IP grabber
     LOCAL_IP=$(ip -4 route get 8.8.8.8 2>/dev/null | awk '{print $7}' | tr -d '\n')
     if [ -z "$LOCAL_IP" ]; then
         LOCAL_IP=$(ifconfig 2>/dev/null | grep 'inet addr' | grep -v '127.0.0.1' | awk '{print $2}' | cut -d: -f2 | head -n 1)
@@ -35,10 +36,11 @@ else
     SUDO_CMD="sudo"
     KLIPPER_EXTRAS_PATH="${HOME}/klipper/klippy/extras"
     PRINTER_CONFIG_PATH="${HOME}/printer_data/config"
+    KLIPPER_RESTART_CMD="$SUDO_CMD systemctl restart klipper"
+    NGINX_RESTART_CMD="$SUDO_CMD systemctl restart nginx"
     LOCAL_IP=$(hostname -I | awk '{print $1}' | tr -d '[:space:]')
 fi
 
-# Fallback just in case paths get weird
 if [ ! -d "$PRINTER_CONFIG_PATH" ]; then
     PRINTER_CONFIG_PATH=$(find / -name "printer.cfg" -type f 2>/dev/null | head -n 1 | xargs dirname)
 fi
@@ -92,6 +94,7 @@ fi
 
 # 6. Nginx Setup
 echo "-> Configuring Nginx..."
+$SUDO_CMD mkdir -p /etc/nginx/conf.d
 $SUDO_CMD rm -f /etc/nginx/conf.d/cal_hub.conf
 $SUDO_CMD rm -f /etc/nginx/sites-enabled/cal_hub 2>/dev/null
 
@@ -116,15 +119,17 @@ server {
 }
 EOF"
 
+# Surgically inject include into Creality's Nginx core file if missing
+if [ "$IS_SONIC_PAD" -eq 1 ]; then
+    if ! grep -q "include /etc/nginx/conf.d/\*.conf;" /etc/nginx/nginx.conf; then
+        sed -i 's/http {/http {\n    include \/etc\/nginx\/conf.d\/*.conf;/g' /etc/nginx/nginx.conf
+    fi
+fi
+
 # 7. Restart Services
 echo "-> Restarting services..."
-if [ "$IS_SONIC_PAD" -eq 1 ]; then
-    /etc/init.d/klipper restart
-    /etc/init.d/nginx restart
-else
-    $SUDO_CMD systemctl restart nginx
-    $SUDO_CMD systemctl restart klipper
-fi
+$NGINX_RESTART_CMD
+$KLIPPER_RESTART_CMD
 
 echo -e "\n${GREEN}======================================================${NC}"
 echo -e "${GREEN}${BOLD} 🚀 INSTALLATION COMPLETE! 🚀${NC}"
