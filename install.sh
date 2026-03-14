@@ -82,15 +82,28 @@ cp -r ./ui/* $UI_DEST_PATH/
 cp ./*.stl $FILES_DEST_PATH/ 2>/dev/null
 $SUDO_CMD chmod -R 755 $UI_DEST_PATH
 
-# 5. Klipper Integration
-echo "-> Checking printer.cfg for includes..."
-if ! grep -q "\[include calibration_hub.cfg\]" "$PRINTER_CONFIG_PATH/printer.cfg"; then
-    sed -i '1i [include calibration_hub.cfg]' "$PRINTER_CONFIG_PATH/printer.cfg"
-fi
-echo "-> Increasing max extrusion limit..."
-if ! grep -q "max_extrude_only_distance" "$PRINTER_CONFIG_PATH/printer.cfg"; then
-    sed -i '/\[extruder\]/a max_extrude_only_distance: 150.0' "$PRINTER_CONFIG_PATH/printer.cfg"
-fi
+# 5. Klipper Integration (Multi-Printer Aware)
+echo "-> Checking all printer configs for includes..."
+
+# Find all directories that contain a printer.cfg
+CONFIG_DIRS=$(find /root /home -name "printer.cfg" -type f 2>/dev/null | xargs dirname)
+
+for dir in $CONFIG_DIRS; do
+    echo "   Updating config in: $dir"
+    
+    # Add the include if it's missing
+    if ! grep -q "\[include calibration_hub.cfg\]" "$dir/printer.cfg"; then
+        sed -i '1i [include calibration_hub.cfg]' "$dir/printer.cfg"
+    fi
+    
+    # Add the extrusion limit if it's missing
+    if ! grep -q "max_extrude_only_distance" "$dir/printer.cfg"; then
+        sed -i '/\[extruder\]/a max_extrude_only_distance: 150.0' "$dir/printer.cfg"
+    fi
+
+    # Copy the macro file to THIS specific config folder
+    cp ./calibration_hub.cfg "$dir/" 2>/dev/null
+done
 
 # 6. Nginx Setup
 echo "-> Configuring Nginx..."
