@@ -674,15 +674,18 @@
         </div>
 
 
-    <script>
+<script>
         let moonrakerUrl = "";
-        
+        let chartInstance = null;
+        let screwCoords = { FL: null, FR: null, BL: null, BR: null };
+
         // --- Smart Navigation Engine ---
         function showStep(showIdx) {
             document.querySelectorAll('.step-container').forEach(el => el.classList.remove('step-active'));
             document.getElementById(`step-${showIdx}`).classList.add('step-active');
             if(showIdx === 5 && !chartInstance) initChart();
         }
+        
         for(let i=0; i<=21; i++) {
             let nxt = document.getElementById(`btn-next-${i}`);
             let bck = document.getElementById(`btn-back-${i}`);
@@ -690,7 +693,7 @@
             if(bck) bck.onclick = () => showStep(i-1);
         }
 
-        // --- Hardware Status & Gatekeepers ---
+        // --- Gatekeepers ---
         function toggleSensorless() {
             const isSensorless = document.getElementById('toggle-sensorless').checked;
             const checkEndstops = document.getElementById('check-endstops');
@@ -701,6 +704,9 @@
         }
         function validateStep1() { const ok = document.getElementById('check-endstops').checked && document.getElementById('check-probe').checked; document.getElementById('btn-next-1').disabled = !ok; document.getElementById('btn-next-1').style.opacity = ok ? "1" : "0.5"; }
         function validateStep2() { const ok = document.getElementById('check-buzz').checked && document.getElementById('check-travel').checked; document.getElementById('btn-next-2').disabled = !ok; document.getElementById('btn-next-2').style.opacity = ok ? "1" : "0.5"; document.getElementById('travel-section').style.display = document.getElementById('check-buzz').checked ? "block" : "none"; }
+        function validateStep3() { const ok = document.getElementById('check-kinematics').checked; const btn = document.getElementById('btn-next-3'); btn.disabled = !ok; btn.style.opacity = ok ? "1" : "0.5"; }
+        function validateStep4() { const ok = document.getElementById('check-belts').checked; const btn = document.getElementById('btn-next-4'); btn.disabled = !ok; btn.style.opacity = ok ? "1" : "0.5"; }
+        function validateStep7() { const ok = document.getElementById('check-currents').checked; const btn = document.getElementById('btn-next-7'); btn.disabled = !ok; btn.style.opacity = ok ? "1" : "0.5"; }
 
         // --- GCODE Execution ---
         async function runGcode(gcode, message, btn) {
@@ -708,304 +714,158 @@
             try { await fetch(`${moonrakerUrl}/printer/gcode/script`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: gcode }) }); } catch (e) {} 
             finally { setTimeout(() => { btn.innerText = originalText; btn.style.backgroundColor = ""; btn.style.color = ""; btn.disabled = false; }, 2000); }
         }
-        async function forceMove(stepper, dist, btn) { runGcode(`FORCE_MOVE STEPPER=${stepper} DISTANCE=${dist} VELOCITY=15`, '', btn); }
-        async function runTestZ(val, statusId) { runGcode(`TESTZ Z=${val}`, '', document.getElementById(statusId)); }
-        async function extrudeFilament(amt, btn) { runGcode("M83",'',btn); setTimeout(()=>runGcode(`G1 E${amt} F60`,'',btn), 500); setTimeout(()=>runGcode("M82",'',btn), 1000); }
-        async function queryEndstops() { runGcode("QUERY_ENDSTOPS",'',document.getElementById('btn-query-endstops')); setTimeout(async () => { try { const r = await fetch(`${moonrakerUrl}/printer/objects/query?query_endstops`); const states = (await r.json()).result.status.query_endstops.last_query; let out = ""; for (const [axis, state] of Object.entries(states)) out += `<strong>${axis.toUpperCase()}</strong>: ${state === 1 ? '<span style="color:#f38ba8;">TRIGGERED</span>' : 'open'}<br>`; document.getElementById('endstop-list').innerHTML = out; } catch (e) {} }, 500); }
-        async function queryProbe() { try { const r = await fetch(`${moonrakerUrl}/printer/objects/query?probe`); const s = (await r.json()).result.status.probe.last_query; document.getElementById('probe-status').innerHTML = `Probe: <strong>${s ? '<span style="color:#f38ba8;">TRIGGERED</span>' : 'open'}</strong>`; } catch (e) {} }
 
-        // --- Math Calculators ---
+        // --- Hardware Status (Pad-Proof Versions) ---
+        async function queryEndstops() {
+            const listEl = document.getElementById('endstop-list');
+            const btn = document.getElementById('btn-query-endstops');
+            listEl.innerHTML = "Querying hardware...";
+            runGcode("QUERY_ENDSTOPS", '', btn);
+
+            // 1s timeout to let slow MCUs (like Sonic Pad) respond
+            setTimeout(async () => {
+                try {
+                    const r = await fetch(`${moonrakerUrl}/printer/objects/query?query_endstops`);
+                    const data = await r.json();
+                    const states = data.result.status.query_endstops.last_query || {};
+                    let out = "";
+                    for (const [axis, state] of Object.entries(states)) {
+                        const isTriggered = (state === 1 || state === "TRIGGERED" || state === true);
+                        out += `<strong>${axis.toUpperCase()}</strong>: ${isTriggered ? '<span style="color:#f38ba8;">TRIGGERED</span>' : 'open'}<br>`;
+                    }
+                    listEl.innerHTML = out || "No endstops reported.";
+                } catch (e) { listEl.innerHTML = "Error querying endstops."; }
+            }, 1000);
+        }
+
+        async function queryProbe() {
+            try {
+                const r = await fetch(`${moonrakerUrl}/printer/objects/query?probe`);
+                const s = (await r.json()).result.status.probe.last_query;
+                document.getElementById('probe-status').innerHTML = `Probe: <strong>${s ? '<span style="color:#f38ba8;">TRIGGERED</span>' : 'open'}</strong>`;
+            } catch (e) {}
+        }
+
+        // --- Init Wizard (With Defensive Fallbacks) ---
+        async function initWizard() {
+            const grid = document.getElementById('motor-buttons');
+            grid.innerHTML = "Scanning ports...";
+            
+            const baseIp = window.location.protocol + "//" + window.location.hostname;
+            const ports = [7125, 7126, 7127, 7128];
+            let found = false;
+
+            for (let port of ports) {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 1000);
+                    const res = await fetch(`${baseIp}:${port}/printer/objects/query?configfile`, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    if (res.ok) { moonrakerUrl = `${baseIp}:${port}`; found = true; break; }
+                } catch(e) {}
+            }
+
+            if (!found) {
+                grid.innerHTML = `<span style="color:#f38ba8;">Error: Could not find Klipper.</span>`;
+                return;
+            }
+
+            try {
+                const [hubResp, configResp] = await Promise.all([
+                    fetch(`${moonrakerUrl}/printer/objects/query?calibration_hub`),
+                    fetch(`${moonrakerUrl}/printer/objects/query?configfile`)
+                ]);
+
+                const hubData = await hubResp.json();
+                const configData = await configResp.json();
+                const hub = hubData.result.status.calibration_hub || {};
+                const rawConfig = configData.result.status.configfile.config || {};
+
+                // MOTOR FALLBACK LOGIC
+                grid.innerHTML = ""; 
+                let motorList = hub.motors || [];
+
+                if (motorList.length === 0) {
+                    Object.keys(rawConfig).forEach(key => {
+                        if (key.startsWith('stepper_')) motorList.push(key.replace('stepper_', ''));
+                        if (key === 'extruder') motorList.push('extruder');
+                    });
+                    motorList = [...new Set(motorList)].sort();
+                }
+
+                motorList.forEach(m => { 
+                    const btn = document.createElement('button'); 
+                    btn.className = 'btn-motor btn secondary'; 
+                    btn.innerText = "Buzz " + m.toUpperCase(); 
+                    btn.onclick = () => runGcode(`STEPPER_BUZZ STEPPER=${m === 'extruder' ? 'extruder' : 'stepper_'+m}`, '', btn); 
+                    grid.appendChild(btn); 
+                });
+
+                // Alignment buttons
+                if (rawConfig.extruder && rawConfig.extruder.rotation_distance) document.getElementById('current-rd').value = rawConfig.extruder.rotation_distance;
+                const alignDiv = document.getElementById('alignment-buttons'); alignDiv.innerHTML = ""; 
+                if (rawConfig.z_tilt) alignDiv.innerHTML += `<button onclick="runGcode('Z_TILT_ADJUST', '', this)" class="btn secondary">⚖️ Z-Tilt Adjust</button>`;
+                if (rawConfig.quad_gantry_level) alignDiv.innerHTML += `<button onclick="runGcode('QUAD_GANTRY_LEVEL', '', this)" class="btn secondary">⚖️ QGL</button>`;
+                if (rawConfig.screws_tilt_adjust) alignDiv.innerHTML += `<button onclick="runGcode('SCREWS_TILT_CALCULATE', '', this)" class="btn secondary">⚙️ Screws Tilt Calculate</button>`;
+                if (rawConfig.bed_screws) alignDiv.innerHTML += `<button onclick="runGcode('BED_SCREWS_ADJUST', '', this)" class="btn secondary">⚙️ Manual Bed Screws</button>`;
+                
+            } catch (e) { grid.innerHTML = `JS Error: ${e.message}`; }
+        }
+
+        // --- Math & Charts ---
         function calcRotation() { const c = parseFloat(document.getElementById('current-rd').value); const a = parseFloat(document.getElementById('actual-ext').value); if(c && a) document.getElementById('calc-result').innerHTML = `Set rotation_distance: <strong>${(c * (a / 100)).toFixed(3)}</strong>`; }
         function calcCurrent() { const r = parseFloat(document.getElementById('rated-current').value); if(r) document.getElementById('current-result').innerHTML = `Set run_current: <strong>${(r * 0.707 * 0.8).toFixed(3)}</strong>`; }
         function calcFlow() { const e = parseFloat(document.getElementById('flow-expected').value); const m = parseFloat(document.getElementById('flow-measured').value); const c = parseFloat(document.getElementById('flow-current').value); if(e&&m&&c) document.getElementById('flow-status').innerHTML = `New Slicer Flow: <strong>${(c * (e / m)).toFixed(2)}%</strong>`; }
-        function calcPA() { const h = parseFloat(document.getElementById('pa-height').value); const f = parseFloat(document.getElementById('pa-factor').value); if(h&&f) document.getElementById('pa-status').innerHTML = `Set pressure_advance: <strong>${(h * f).toFixed(3)}</strong>`; }
-        async function calcSkew() { const ac=document.getElementById('skew-ac').value; const bd=document.getElementById('skew-bd').value; const ad=document.getElementById('skew-ad').value; if(ac&&bd&&ad) { document.getElementById('skew-status').innerHTML = "Sending SET_SKEW..."; await runGcode(`SET_SKEW XY=${ac},${bd},${ad}`, '', document.getElementById('skew-status')); await runGcode(`SKEW_PROFILE SAVE=my_skew`, '', document.getElementById('skew-status')); document.getElementById('skew-status').innerHTML = "Skew saved to profile 'my_skew'!"; } }
+        function calcPA() { const h = parseFloat(document.getElementById('pa-height').value); const f = parseFloat(document.getElementById('pa-factor').value); if(h&&f) document.getElementById('pa-result').innerHTML = `Set pressure_advance: <strong>${(h * f).toFixed(3)}</strong>`; }
+        async function calcSkew() { const ac=document.getElementById('skew-ac').value; const bd=document.getElementById('skew-bd').value; const ad=document.getElementById('skew-ad').value; if(ac&&bd&&ad) { document.getElementById('skew-status').innerHTML = "Sending SET_SKEW..."; await runGcode(`SET_SKEW XY=${ac},${bd},${ad}`, '', document.getElementById('skew-status')); await runGcode(`SKEW_PROFILE SAVE=my_skew`, '', document.getElementById('skew-status')); document.getElementById('skew-status').innerHTML = "Skew saved!"; } }
 
-        // --- Init Data ---
-async function initWizard() {
-    const grid = document.getElementById('motor-buttons');
-    grid.innerHTML = "<span style='grid-column: 1 / -1; text-align: center;'>Scanning ports for an active printer...</span>";
-    
-    const baseIp = window.location.protocol + "//" + window.location.hostname;
-    const ports = [7125, 7126, 7127, 7128];
-    let found = false;
-
-    // 1. Scan the ports dynamically
-    for (let port of ports) {
-        try {
-            // Give each port 1 second to respond so we don't hang on dead printers
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 1000);
-            
-            const res = await fetch(`${baseIp}:${port}/printer/objects/query?calibration_hub`, { signal: controller.signal });
-            clearTimeout(timeoutId);
-            
-            const data = await res.json();
-            
-            // If it responds AND has our custom object, we found our target
-            if (data.result && data.result.status && data.result.status.calibration_hub) {
-                moonrakerUrl = `${baseIp}:${port}`;
-                found = true;
-                console.log(`Locked onto printer at port ${port}`);
-                break; 
-            }
-        } catch(e) { 
-            // Port dead or missing object, silently skip to the next one
-        }
-    }
-
-    // 2. Error out if nothing is found
-    if (!found) {
-        grid.innerHTML = `<span style="color:#f38ba8; grid-column: 1 / -1;">Error: Scanned ports 7125-7128. Could not find any printer with calibration_hub loaded. Is Klipper halted?</span>`;
-        return;
-    }
-
-    // 3. We found it, now load the motors
-    try {
-        const hubResp = await fetch(`${moonrakerUrl}/printer/objects/query?calibration_hub`);
-        const hub = (await hubResp.json()).result.status.calibration_hub;
-        
-        grid.innerHTML = ""; 
-        hub.motors.forEach(m => { 
-            const btn = document.createElement('button'); 
-            btn.className = 'btn-motor btn secondary'; 
-            btn.innerText = "Buzz " + m.toUpperCase(); 
-            btn.onclick = () => runGcode(`STEPPER_BUZZ STEPPER=${m === 'extruder' ? 'extruder' : 'stepper_'+m}`, '', btn); 
-            grid.appendChild(btn); 
-        });
-
-        // Load Alignment buttons
-        const rawConfig = (await (await fetch(`${moonrakerUrl}/printer/objects/query?configfile`)).json()).result.status.configfile.config;
-        if (rawConfig.hasOwnProperty('extruder') && rawConfig.extruder.rotation_distance) {
-            document.getElementById('current-rd').value = rawConfig.extruder.rotation_distance;
-        }
-        const alignDiv = document.getElementById('alignment-buttons'); 
-        alignDiv.innerHTML = ""; 
-        if (rawConfig.hasOwnProperty('z_tilt')) alignDiv.innerHTML += `<button onclick="runGcode('Z_TILT_ADJUST', '', this)" class="btn secondary">⚖️ Z-Tilt Adjust</button>`;
-        if (rawConfig.hasOwnProperty('quad_gantry_level')) alignDiv.innerHTML += `<button onclick="runGcode('QUAD_GANTRY_LEVEL', '', this)" class="btn secondary">⚖️ Quad Gantry Level (QGL)</button>`;
-        if (rawConfig.hasOwnProperty('screws_tilt_adjust')) alignDiv.innerHTML += `<button onclick="runGcode('SCREWS_TILT_CALCULATE', '', this)" class="btn secondary">⚙️ Screws Tilt Calculate</button>`;
-        if (rawConfig.hasOwnProperty('bed_screws')) alignDiv.innerHTML += `<button onclick="runGcode('BED_SCREWS_ADJUST', '', this)" class="btn secondary">⚙️ Manual Bed Screws</button>`;
-// If Klipper doesn't have ANY of the above, give them the interactive Helper
-        if (alignDiv.innerHTML === "") {
-            alignDiv.innerHTML = `<div style="background-color: rgba(243, 139, 168, 0.1); border-left: 4px solid #f38ba8; padding: 10px; color: #cdd6f4; font-size: 13px; margin-top: 10px;">
-                <strong style="color:#f38ba8;">⚠️ Missing Config!</strong><br>
-                Klipper doesn't see any bed leveling settings. Let's generate them right now.<br><br>
-                <button onclick="document.getElementById('screw-helper').style.display = 'block'" class="btn" style="background-color: #89b4fa; color: #1e1e2e; width:100%; font-weight:bold; padding:8px;">🛠️ Open Screw Config Generator</button>
-            </div>
-            
-            <div id="screw-helper" style="display:none; margin-top: 10px; background-color: #181825; padding: 15px; border-radius: 8px; border: 1px solid #45475a;">
-                
-                <div style="background-color: #1e1e2e; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
-                    <p style="font-size:13px; color:#f9e2af; margin-top:0; margin-bottom:10px;"><strong>1. Prepare</strong></p>
-                    <button onclick="runGcode('G28\\nG1 Z5 F600', 'Homing...', this)" class="btn secondary" style="width:100%; font-weight:bold;">🏠 Home All & Lift Z to 5mm</button>
-                    
-                    <p style="font-size:13px; color:#f9e2af; margin-top:15px; margin-bottom:10px;"><strong>2. Jog Nozzle</strong> (Get it directly over a screw)</p>
-                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 5px;">
-                        <button onclick="jogToolhead('X', -10, this)" class="btn secondary">X -10</button>
-                        <button onclick="jogToolhead('X', -1, this)" class="btn secondary">X -1</button>
-                        <button onclick="jogToolhead('X', 1, this)" class="btn secondary">X +1</button>
-                        <button onclick="jogToolhead('X', 10, this)" class="btn secondary">X +10</button>
-                    </div>
-                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;">
-                        <button onclick="jogToolhead('Y', -10, this)" class="btn secondary">Y -10</button>
-                        <button onclick="jogToolhead('Y', -1, this)" class="btn secondary">Y -1</button>
-                        <button onclick="jogToolhead('Y', 1, this)" class="btn secondary">Y +1</button>
-                        <button onclick="jogToolhead('Y', 10, this)" class="btn secondary">Y +10</button>
-                    </div>
-                </div>
-
-                <p style="font-size:13px; color:#f9e2af; margin-top:0; margin-bottom:10px;"><strong>3. Record Position</strong></p>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                    <button onclick="getScrewPos('FL', this)" class="btn secondary" style="font-size:12px; padding:8px;">1. Front-Left</button>
-                    <button onclick="getScrewPos('FR', this)" class="btn secondary" style="font-size:12px; padding:8px;">2. Front-Right</button>
-                    <button onclick="getScrewPos('BL', this)" class="btn secondary" style="font-size:12px; padding:8px;">3. Back-Left</button>
-                    <button onclick="getScrewPos('BR', this)" class="btn secondary" style="font-size:12px; padding:8px;">4. Back-Right</button>
-                </div>
-                
-                <p style="font-size:13px; color:#a6adc8; margin-top:15px; margin-bottom:5px;">Copy and paste this into your <strong>printer.cfg</strong>:</p>
-                <textarea id="screw-config-output" style="width:95%; height:130px; background:#000; color:#a6e3a1; font-family:monospace; font-size:12px; padding:10px; border:1px solid #585b70; border-radius:6px;" readonly>; Waiting for you to click all 4 buttons...</textarea>
-            </div>`;
-        }
-        
-    } catch (e) {
-        grid.innerHTML = `<span style="color:#f38ba8; grid-column: 1 / -1;">JS Error during load: ${e.message}</span>`;
-    }
-}
-
-
-async function runPID(heater, tempId, btn) {
-    const target = document.getElementById(tempId).value;
-    const statusBox = document.getElementById('pid-status');
-
-    // Lock the button permanently for this session so they can't double-click
-    btn.disabled = true;
-    btn.style.backgroundColor = "#fab387";
-    btn.style.color = "#1e1e2e";
-    btn.innerText = "Tuning... Watch Graph!";
-
-    // If it's the hotend, blast the part fan first to prevent thermal runaway errors later
-    if (heater === 'extruder') {
-        statusBox.innerHTML = "Turning on part cooling fan...<br>";
-        try {
-            await fetch(`${moonrakerUrl}/printer/gcode/script`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ script: "M106 S255" })
-            });
-        } catch(e) {}
-    }
-
-    statusBox.innerHTML += `Starting PID tune for ${heater} at ${target}°C. <br><strong style="color:#f38ba8;">DO NOT CLICK ANYTHING</strong> until the graph finishes its 5 waves and the line goes completely flat.`;
-
-    // Fire and forget. We DO NOT await this fetch because a 10-minute command will cause a browser timeout.
-    fetch(`${moonrakerUrl}/printer/gcode/script`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script: `PID_CALIBRATE HEATER=${heater} TARGET=${target}` })
-    }).catch(e => console.log("Fetch timed out. This is expected for long PID tunes."));
-}
-
-// Attach the new function to your existing buttons
-document.getElementById('btn-pid-bed').onclick = function() { runPID('heater_bed', 'bed-temp', this); };
-document.getElementById('btn-pid-ext').onclick = function() { runPID('extruder', 'ext-temp', this); };
-
-// --- ADD THIS STUFF BACK IN ---
-let chartInstance = null;
-function initChart() { const ctx = document.getElementById('tempChart').getContext('2d'); chartInstance = new Chart(ctx, { type: 'line', data: { labels: Array(60).fill(''), datasets: [{ label: 'Hotend', borderColor: '#f38ba8', data: Array(60).fill(null), pointRadius: 0, tension: 0.2 }, { label: 'Bed', borderColor: '#fab387', data: Array(60).fill(null), pointRadius: 0, tension: 0.2 }] }, options: { animation: false, scales: { y: { beginAtZero: true, max: 280 }, x: { display: false } } } }); setInterval(updateTemps, 1000); }
-async function updateTemps() { try { const d = (await (await fetch(`${moonrakerUrl}/printer/objects/query?extruder&heater_bed`)).json()).result.status; chartInstance.data.datasets[0].data.shift(); chartInstance.data.datasets[0].data.push(d.extruder.temperature); chartInstance.data.datasets[1].data.shift(); chartInstance.data.datasets[1].data.push(d.heater_bed ? d.heater_bed.temperature : 0); chartInstance.update(); } catch (e) {} }
-
-// This actually fires the whole startup sequence!
-initWizard();
-// ------------------------------
-
-        function validateStep3() { 
-            const ok = document.getElementById('check-kinematics').checked; 
-            const btn = document.getElementById('btn-next-3'); 
-            btn.disabled = !ok; 
-            btn.style.opacity = ok ? "1" : "0.5"; 
-        }
-        function validateStep4() { 
-            const ok = document.getElementById('check-belts').checked; 
-            const btn = document.getElementById('btn-next-4'); 
-            btn.disabled = !ok; 
-            btn.style.opacity = ok ? "1" : "0.5"; 
+        async function runPID(heater, tempId, btn) {
+            const target = document.getElementById(tempId).value;
+            const statusBox = document.getElementById('pid-status');
+            btn.disabled = true; btn.innerText = "Tuning...";
+            if (heater === 'extruder') await fetch(`${moonrakerUrl}/printer/gcode/script`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: "M106 S255" }) });
+            statusBox.innerHTML = `Tuning ${heater}... Stay on this page!`;
+            fetch(`${moonrakerUrl}/printer/gcode/script`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: `PID_CALIBRATE HEATER=${heater} TARGET=${target}` }) });
         }
 
-        function validateStep7() { 
-            const ok = document.getElementById('check-currents').checked; 
-            const btn = document.getElementById('btn-next-7'); 
-            btn.disabled = !ok; 
-            btn.style.opacity = ok ? "1" : "0.5"; 
-            }
+        document.getElementById('btn-pid-bed').onclick = function() { runPID('heater_bed', 'bed-temp', this); };
+        document.getElementById('btn-pid-ext').onclick = function() { runPID('extruder', 'ext-temp', this); };
 
-async function smartMove(axis, dist, btn) {
-    const originalText = btn.innerText;
-    btn.disabled = true;
-    btn.innerText = "Moving...";
-    
-    // THE MAGIC: 
-    // 1. Force the brain to think the current spot is 0.
-    // 2. Move 10mm or 50mm relatively.
-    // 3. Clear the fake position so we don't accidentally 'home' the printer.
-    const gcode = [
-        `SET_KINEMATIC_POSITION ${axis.toUpperCase()}=0`,
-        `G91`, 
-        `G1 ${axis.toUpperCase()}${dist} F900`, 
-        `M400`, 
-        `SET_KINEMATIC_POSITION`, 
-        `G90`
-    ].join('\n');
+        function initChart() { const ctx = document.getElementById('tempChart').getContext('2d'); chartInstance = new Chart(ctx, { type: 'line', data: { labels: Array(60).fill(''), datasets: [{ label: 'Hotend', borderColor: '#f38ba8', data: Array(60).fill(null), pointRadius: 0, tension: 0.2 }, { label: 'Bed', borderColor: '#fab387', data: Array(60).fill(null), pointRadius: 0, tension: 0.2 }] }, options: { animation: false, scales: { y: { beginAtZero: true, max: 280 }, x: { display: false } } } }); setInterval(updateTemps, 1000); }
+        async function updateTemps() { try { const d = (await (await fetch(`${moonrakerUrl}/printer/objects/query?extruder&heater_bed`)).json()).result.status; chartInstance.data.datasets[0].data.shift(); chartInstance.data.datasets[0].data.push(d.extruder.temperature); chartInstance.data.datasets[1].data.shift(); chartInstance.data.datasets[1].data.push(d.heater_bed ? d.heater_bed.temperature : 0); chartInstance.update(); } catch (e) {} }
 
-    try {
-        await fetch(`${moonrakerUrl}/printer/gcode/script`, { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ script: gcode }) 
-        });
-    } catch (e) {
-        console.error("Move failed", e);
-    } finally {
-        setTimeout(() => {
-            btn.innerText = originalText;
-            btn.disabled = false;
-        }, 1200); // Slight delay to ensure Klipper finishes the move
-    }
-}
-function runTestZ(val, statusId) { 
-    // This calls the Klipper command for the paper test height adjustment
-    runGcode(`TESTZ Z=${val}`, '', document.getElementById(statusId)); 
-    // This updates the box so the user knows the command actually sent
-    document.getElementById(statusId).innerText = `Sent adjustment: ${val}`;
-}
+        async function smartMove(axis, dist, btn) {
+            const originalText = btn.innerText; btn.disabled = true;
+            const gcode = [`SET_KINEMATIC_POSITION ${axis.toUpperCase()}=0`, `G91`, `G1 ${axis.toUpperCase()}${dist} F900`, `M400`, `SET_KINEMATIC_POSITION`, `G90`].join('\n');
+            await fetch(`${moonrakerUrl}/printer/gcode/script`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: gcode }) });
+            setTimeout(() => { btn.innerText = originalText; btn.disabled = false; }, 1200);
+        }
 
-// --- Screw Coordinate Helper ---
-let screwCoords = { FL: null, FR: null, BL: null, BR: null };
+        async function jogToolhead(axis, dist, btn) {
+            const gcode = `G91\nG1 ${axis.toUpperCase()}${dist} F3000\nG90`;
+            await fetch(`${moonrakerUrl}/printer/gcode/script`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: gcode }) });
+        }
 
-async function getScrewPos(pos, btn) {
-    try {
-        // Ask Klipper exactly where the toolhead is sitting right now
-        const r = await fetch(`${moonrakerUrl}/printer/objects/query?toolhead`);
-        const p = (await r.json()).result.status.toolhead.position;
-        
-        // Save the X and Y coordinates (ignoring Z)
-        screwCoords[pos] = `${p[0].toFixed(1)}, ${p[1].toFixed(1)}`;
-        
-        // Update the button to show it worked
-        btn.innerText = `${pos}: ${screwCoords[pos]}`;
-        btn.style.backgroundColor = "#a6e3a1"; // Turn green
-        btn.style.color = "#1e1e2e";
-        
-        checkAllScrews();
-    } catch(e) {
-        btn.innerText = "Error: Klipper not responding";
-    }
-}
+        async function getScrewPos(pos, btn) {
+            try {
+                const r = await fetch(`${moonrakerUrl}/printer/objects/query?toolhead`);
+                const p = (await r.json()).result.status.toolhead.position;
+                screwCoords[pos] = `${p[0].toFixed(1)}, ${p[1].toFixed(1)}`;
+                btn.innerText = `${pos}: ${screwCoords[pos]}`; btn.style.backgroundColor = "#a6e3a1";
+                if(screwCoords.FL && screwCoords.FR && screwCoords.BL && screwCoords.BR) {
+                    document.getElementById('screw-config-output').value = `[bed_screws]\nscrew1: ${screwCoords.FL}\nscrew2: ${screwCoords.FR}\nscrew3: ${screwCoords.BR}\nscrew4: ${screwCoords.BL}`;
+                }
+            } catch(e) {}
+        }
 
-function checkAllScrews() {
-    // If all 4 have been recorded, generate the Klipper config block
-    if(screwCoords.FL && screwCoords.FR && screwCoords.BL && screwCoords.BR) {
-        const out = document.getElementById('screw-config-output');
-        out.value = `[bed_screws]\n` +
-                    `screw1: ${screwCoords.FL}\n` +
-                    `screw1_name: front left screw\n` +
-                    `screw2: ${screwCoords.FR}\n` +
-                    `screw2_name: front right screw\n` +
-                    `screw3: ${screwCoords.BR}\n` +
-                    `screw3_name: back right screw\n` +
-                    `screw4: ${screwCoords.BL}\n` +
-                    `screw4_name: back left screw`;
-        
-        out.style.borderColor = "#a6e3a1"; // Highlight the box green
-    }
-}
+        function runTestZ(val, statusId) { 
+            runGcode(`TESTZ Z=${val}`, '', document.getElementById(statusId)); 
+            document.getElementById(statusId).innerText = `Sent adjustment: ${val}`;
+        }
 
-// A safe jogging function that doesn't mess up Klipper's absolute coordinates
-async function jogToolhead(axis, dist, btn) {
-    const originalText = btn.innerText;
-    btn.disabled = true;
-    btn.style.backgroundColor = "#585b70"; // Make it look pressed
-    
-    // G91 = Relative mode, G1 = Move, G90 = Back to Absolute mode
-    const gcode = `G91\nG1 ${axis.toUpperCase()}${dist} F3000\nG90`;
-    
-    try {
-        await fetch(`${moonrakerUrl}/printer/gcode/script`, { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ script: gcode }) 
-        });
-    } catch(e) {
-        console.error("Jog failed", e);
-    } finally {
-        setTimeout(() => { 
-            btn.innerText = originalText; 
-            btn.style.backgroundColor = ""; 
-            btn.disabled = false; 
-        }, 400); // Quick unlock so they can click it fast
-    }
-}
+        function extrudeFilament(amt, btn) { runGcode("M83",'',btn); setTimeout(()=>runGcode(`G1 E${amt} F60`,'',btn), 500); setTimeout(()=>runGcode("M82",'',btn), 1000); }
 
-
+        initWizard();
     </script>
 </body>
 </html>
