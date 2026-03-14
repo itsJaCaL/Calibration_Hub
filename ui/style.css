@@ -1,23 +1,25 @@
 body {
-    background-color: #1e1e2e; /* Dark theme background */
+    background-color: #1e1e2e;
     color: #cdd6f4;
-    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-family: sans-serif;
+    margin: 0;
+    padding: 20px; /* Gives some breathing room on small screens */
     display: flex;
     justify-content: center;
-    align-items: center;
-    height: 100vh;
-    margin: 0;
+    align-items: flex-start; /* Changed from center to allow scrolling down */
+    min-height: 100vh;
+    overflow-y: auto; /* Force scrollbar if needed */
 }
 
 .card {
-    background-color: #313244;
-    padding: 30px;
+    background-color: #181825;
+    padding: 20px;
     border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-    text-align: center;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
     width: 100%;
-    max-width: 450px;
-    border: 1px solid #45475a;
+    max-width: 550px;
+    margin: auto; /* This centers it perfectly but allows it to grow */
+    box-sizing: border-box;
 }
 
 h2 {
