@@ -12,9 +12,9 @@ echo -e "${CYAN}=====================================${NC}"
 echo -e "${BOLD} Installing JaCaL's Calibration Wizard...${NC}"
 echo -e "${CYAN}=====================================${NC}"
 
-# 1. Environment Detection & Variable Setup
-if grep -q "OpenWrt" /etc/os-release 2>/dev/null || grep -q "Sonic" /etc/issue 2>/dev/null; then
-    echo "-> Creality Sonic Pad detected."
+# 1. Environment Detection & Variable Setup (Beefed up for Neptune/Sonic Pads)
+if grep -iqE "openwrt|sonic|neptune" /etc/os-release /etc/issue 2>/dev/null || hostname | grep -iq "spad" || ! command -v sudo >/dev/null 2>&1; then
+    echo "-> Creality Sonic Pad / Embedded environment detected."
     if [ "$(id -u)" -ne 0 ]; then
         echo "ERROR: You are logged in as 'creality'. You MUST be 'root' to install this."
         exit 1
@@ -23,7 +23,12 @@ if grep -q "OpenWrt" /etc/os-release 2>/dev/null || grep -q "Sonic" /etc/issue 2
     SUDO_CMD=""
     KLIPPER_EXTRAS_PATH="/usr/share/klipper/klippy/extras"
     PRINTER_CONFIG_PATH="/root/printer_data/config"
-    LOCAL_IP=$(ip -4 route get 8.8.8.8 | awk {'print $7'} | tr -d '\n')
+    
+    # BusyBox specific IP grabber
+    LOCAL_IP=$(ip -4 route get 8.8.8.8 2>/dev/null | awk '{print $7}' | tr -d '\n')
+    if [ -z "$LOCAL_IP" ]; then
+        LOCAL_IP=$(ifconfig 2>/dev/null | grep 'inet addr' | grep -v '127.0.0.1' | awk '{print $2}' | cut -d: -f2 | head -n 1)
+    fi
 else
     echo "-> Standard Linux environment detected."
     IS_SONIC_PAD=0
