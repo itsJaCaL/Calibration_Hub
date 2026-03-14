@@ -1,10 +1,5 @@
-#!/bin/bash
+#!/bin/sh
 # JaCaL's Calibration Wizard Installer - Final Production Version
-
-KLIPPER_EXTRAS_PATH="${HOME}/klipper/klippy/extras"
-PRINTER_CONFIG_PATH="${HOME}/printer_data/config"
-UI_DEST_PATH="${PRINTER_CONFIG_PATH}/cal_hub_ui"
-FILES_DEST_PATH="${UI_DEST_PATH}/cal_files"
 
 # ANSI Color Codes
 GREEN='\033[1;32m'
@@ -13,21 +8,48 @@ YELLOW='\033[1;33m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-LOCAL_IP=$(hostname -I | awk '{print $1}' | tr -d '[:space:]')
-WIZARD_URL="http://${LOCAL_IP}:3258"
-
 echo -e "${CYAN}=====================================${NC}"
 echo -e "${BOLD} Installing JaCaL's Calibration Wizard...${NC}"
 echo -e "${CYAN}=====================================${NC}"
 
-# 1. Permissions Fix (Essential for Nginx access)
-echo "-> Adjusting home directory permissions..."
-chmod 755 ${HOME}
-chmod 755 ${PRINTER_CONFIG_PATH}
+# 1. Environment Detection & Variable Setup
+if grep -q "OpenWrt" /etc/os-release 2>/dev/null || grep -q "Sonic" /etc/issue 2>/dev/null; then
+    echo "-> Creality Sonic Pad detected."
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "ERROR: You are logged in as 'creality'. You MUST be 'root' to install this."
+        exit 1
+    fi
+    IS_SONIC_PAD=1
+    SUDO_CMD=""
+    KLIPPER_EXTRAS_PATH="/usr/share/klipper/klippy/extras"
+    PRINTER_CONFIG_PATH="/root/printer_data/config"
+    LOCAL_IP=$(ip -4 route get 8.8.8.8 | awk {'print $7'} | tr -d '\n')
+else
+    echo "-> Standard Linux environment detected."
+    IS_SONIC_PAD=0
+    SUDO_CMD="sudo"
+    KLIPPER_EXTRAS_PATH="${HOME}/klipper/klippy/extras"
+    PRINTER_CONFIG_PATH="${HOME}/printer_data/config"
+    LOCAL_IP=$(hostname -I | awk '{print $1}' | tr -d '[:space:]')
+fi
 
-# 2. Backend & Config
+# Fallback just in case paths get weird
+if [ ! -d "$PRINTER_CONFIG_PATH" ]; then
+    PRINTER_CONFIG_PATH=$(find / -name "printer.cfg" -type f 2>/dev/null | head -n 1 | xargs dirname)
+fi
+
+UI_DEST_PATH="${PRINTER_CONFIG_PATH}/cal_hub_ui"
+FILES_DEST_PATH="${UI_DEST_PATH}/cal_files"
+WIZARD_URL="http://${LOCAL_IP}:3258"
+
+# 2. Permissions Fix
+echo "-> Adjusting directory permissions..."
+$SUDO_CMD chmod 755 ${HOME}
+$SUDO_CMD chmod 755 ${PRINTER_CONFIG_PATH}
+
+# 3. Backend & Config
 echo "-> Installing Klipper backend module..."
-cp ./calibration_hub.py $KLIPPER_EXTRAS_PATH/
+$SUDO_CMD cp ./calibration_hub.py $KLIPPER_EXTRAS_PATH/
 
 echo "-> Generating Klipper Macro..."
 cat > $PRINTER_CONFIG_PATH/calibration_hub.cfg <<EOF
@@ -46,28 +68,29 @@ gcode:
     M118 ====================================
 EOF
 
-# 3. Web UI & STLs
+# 4. Web UI & STLs
 echo "-> Setting up Web UI and Calibration Files..."
 mkdir -p $FILES_DEST_PATH
 cp -r ./ui/* $UI_DEST_PATH/
 cp ./*.stl $FILES_DEST_PATH/ 2>/dev/null
-chmod -R 755 $UI_DEST_PATH
+$SUDO_CMD chmod -R 755 $UI_DEST_PATH
 
-# 4. Klipper Integration
+# 5. Klipper Integration
 echo "-> Checking printer.cfg for includes..."
 if ! grep -q "\[include calibration_hub.cfg\]" "$PRINTER_CONFIG_PATH/printer.cfg"; then
     sed -i '1i [include calibration_hub.cfg]' "$PRINTER_CONFIG_PATH/printer.cfg"
 fi
 echo "-> Increasing max extrusion limit..."
 if ! grep -q "max_extrude_only_distance" "$PRINTER_CONFIG_PATH/printer.cfg"; then
-    # This finds the [extruder] tag in printer.cfg and drops the new setting right below it
     sed -i '/\[extruder\]/a max_extrude_only_distance: 150.0' "$PRINTER_CONFIG_PATH/printer.cfg"
 fi
 
-# 5. Nginx (Using the single-quote method to avoid redirect loops)
+# 6. Nginx Setup
 echo "-> Configuring Nginx..."
-sudo rm -f /etc/nginx/conf.d/cal_hub.conf
-sudo bash -c "cat > /etc/nginx/sites-available/cal_hub <<'EOF'
+$SUDO_CMD rm -f /etc/nginx/conf.d/cal_hub.conf
+$SUDO_CMD rm -f /etc/nginx/sites-enabled/cal_hub 2>/dev/null
+
+$SUDO_CMD sh -c "cat > /etc/nginx/conf.d/cal_hub.conf <<'EOF'
 server {
     listen 3258;
     server_name _;
@@ -88,11 +111,15 @@ server {
 }
 EOF"
 
-sudo ln -sf /etc/nginx/sites-available/cal_hub /etc/nginx/sites-enabled/
-
+# 7. Restart Services
 echo "-> Restarting services..."
-sudo systemctl restart nginx
-sudo systemctl restart klipper
+if [ "$IS_SONIC_PAD" -eq 1 ]; then
+    /etc/init.d/klipper restart
+    /etc/init.d/nginx restart
+else
+    $SUDO_CMD systemctl restart nginx
+    $SUDO_CMD systemctl restart klipper
+fi
 
 echo -e "\n${GREEN}======================================================${NC}"
 echo -e "${GREEN}${BOLD} 🚀 INSTALLATION COMPLETE! 🚀${NC}"
